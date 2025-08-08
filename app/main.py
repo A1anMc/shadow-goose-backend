@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from database import get_db, create_tables, User, Project, Grant
 
-app = FastAPI()
+app = FastAPI(title="Shadow Goose API", version="2.0.0")
 
 # Simple authentication
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
@@ -96,9 +96,13 @@ def get_current_user(username: str = Depends(verify_token), db: Session = Depend
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
+@app.get("/")
+def root():
+    return {"message": "Shadow Goose API v2.0.0", "status": "running"}
+
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": "2.0.0"}
 
 @app.get("/debug")
 def debug():
