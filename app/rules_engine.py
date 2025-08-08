@@ -400,6 +400,254 @@ class RulesEngine:
                         }
                     }
                 ]
+            },
+            {
+                "name": "Production Deployment Approval",
+                "rule_type": RuleType.WORKFLOW.value,
+                "description": "Require admin approval for production deployments",
+                "conditions": [
+                    {
+                        "field": "deployment_environment",
+                        "operator": ConditionOperator.EQUALS.value,
+                        "value": "production"
+                    },
+                    {
+                        "field": "user_role",
+                        "operator": ConditionOperator.NOT_EQUALS.value,
+                        "value": "admin"
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": ActionType.REQUIRE_APPROVAL.value,
+                        "params": {
+                            "approver_role": "admin",
+                            "entity_type": "deployment",
+                            "entity_id": "{deployment_id}"
+                        }
+                    },
+                    {
+                        "type": ActionType.SEND_NOTIFICATION.value,
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#deployments",
+                            "message": "Production deployment requires admin approval"
+                        }
+                    },
+                    {
+                        "type": ActionType.LOG_EVENT.value,
+                        "params": {
+                            "event_type": "deployment_approval_required",
+                            "message": "Production deployment pending approval",
+                            "level": "warning"
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "Staging Auto-Deploy",
+                "rule_type": RuleType.WORKFLOW.value,
+                "description": "Automatically deploy to staging on main branch push",
+                "conditions": [
+                    {
+                        "field": "branch_name",
+                        "operator": ConditionOperator.EQUALS.value,
+                        "value": "main"
+                    },
+                    {
+                        "field": "deployment_environment",
+                        "operator": ConditionOperator.EQUALS.value,
+                        "value": "staging"
+                    },
+                    {
+                        "field": "commit_message",
+                        "operator": ConditionOperator.CONTAINS.value,
+                        "value": "feat:"
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": ActionType.TRIGGER_WORKFLOW.value,
+                        "params": {
+                            "workflow_name": "staging_deploy",
+                            "workflow_params": {
+                                "environment": "staging",
+                                "auto_deploy": True
+                            }
+                        }
+                    },
+                    {
+                        "type": ActionType.SEND_NOTIFICATION.value,
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#deployments",
+                            "message": "Auto-deploying to staging: {commit_message}"
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "Critical Bug Hotfix",
+                "rule_type": RuleType.WORKFLOW.value,
+                "description": "Emergency deployment for critical bug fixes",
+                "conditions": [
+                    {
+                        "field": "commit_message",
+                        "operator": ConditionOperator.CONTAINS.value,
+                        "value": "hotfix:"
+                    },
+                    {
+                        "field": "priority",
+                        "operator": ConditionOperator.EQUALS.value,
+                        "value": "critical"
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": ActionType.TRIGGER_WORKFLOW.value,
+                        "params": {
+                            "workflow_name": "emergency_deploy",
+                            "workflow_params": {
+                                "environment": "production",
+                                "skip_tests": True,
+                                "emergency": True
+                            }
+                        }
+                    },
+                    {
+                        "type": ActionType.SEND_NOTIFICATION.value,
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#alerts",
+                            "message": "🚨 CRITICAL: Emergency deployment for hotfix"
+                        }
+                    },
+                    {
+                        "type": ActionType.LOG_EVENT.value,
+                        "params": {
+                            "event_type": "emergency_deployment",
+                            "message": "Critical hotfix deployment initiated",
+                            "level": "critical"
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "Deployment Health Check",
+                "rule_type": RuleType.WORKFLOW.value,
+                "description": "Monitor deployment health and rollback if needed",
+                "conditions": [
+                    {
+                        "field": "deployment_status",
+                        "operator": ConditionOperator.EQUALS.value,
+                        "value": "failed"
+                    },
+                    {
+                        "field": "deployment_environment",
+                        "operator": ConditionOperator.EQUALS.value,
+                        "value": "production"
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": ActionType.TRIGGER_WORKFLOW.value,
+                        "params": {
+                            "workflow_name": "rollback_deployment",
+                            "workflow_params": {
+                                "environment": "production",
+                                "reason": "health_check_failed"
+                            }
+                        }
+                    },
+                    {
+                        "type": ActionType.SEND_NOTIFICATION.value,
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#alerts",
+                            "message": "🚨 DEPLOYMENT FAILED: Initiating rollback"
+                        }
+                    },
+                    {
+                        "type": ActionType.LOG_EVENT.value,
+                        "params": {
+                            "event_type": "deployment_rollback",
+                            "message": "Production deployment failed, rolling back",
+                            "level": "error"
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "Code Review Required",
+                "rule_type": RuleType.WORKFLOW.value,
+                "description": "Require code review for non-admin commits",
+                "conditions": [
+                    {
+                        "field": "user_role",
+                        "operator": ConditionOperator.NOT_EQUALS.value,
+                        "value": "admin"
+                    },
+                    {
+                        "field": "branch_name",
+                        "operator": ConditionOperator.EQUALS.value,
+                        "value": "main"
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": ActionType.REQUIRE_APPROVAL.value,
+                        "params": {
+                            "approver_role": "admin",
+                            "entity_type": "pull_request",
+                            "entity_id": "{pr_id}"
+                        }
+                    },
+                    {
+                        "type": ActionType.SEND_NOTIFICATION.value,
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#code-review",
+                            "message": "Code review required for main branch commit"
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "Security Scan on Deploy",
+                "rule_type": RuleType.COMPLIANCE.value,
+                "description": "Run security scans before production deployment",
+                "conditions": [
+                    {
+                        "field": "deployment_environment",
+                        "operator": ConditionOperator.EQUALS.value,
+                        "value": "production"
+                    },
+                    {
+                        "field": "security_scan_status",
+                        "operator": ConditionOperator.NOT_EQUALS.value,
+                        "value": "passed"
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": ActionType.TRIGGER_WORKFLOW.value,
+                        "params": {
+                            "workflow_name": "security_scan",
+                            "workflow_params": {
+                                "scan_type": "full",
+                                "block_deploy": True
+                            }
+                        }
+                    },
+                    {
+                        "type": ActionType.SEND_NOTIFICATION.value,
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#security",
+                            "message": "Security scan required before production deploy"
+                        }
+                    }
+                ]
             }
         ]
     

@@ -48,6 +48,22 @@ class RuleContext(BaseModel):
     context: dict
     rule_types: list = None
 
+class DeploymentRequest(BaseModel):
+    environment: str
+    branch_name: str
+    commit_message: str
+    user_role: str
+    deployment_id: str = None
+    priority: str = "normal"
+    security_scan_status: str = "pending"
+
+class CommitRequest(BaseModel):
+    branch_name: str
+    commit_message: str
+    user_role: str
+    pr_id: str = None
+    files_changed: list = []
+
 # Security
 security = HTTPBearer()
 
@@ -63,6 +79,8 @@ app.add_middleware(
 # In-memory storage for testing (will be replaced with database)
 projects_db = []
 users_db = [{"id": 1, "username": "test", "email": "test@shadow-goose.com", "role": "admin"}]
+deployments_db = []
+commits_db = []
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -91,7 +109,7 @@ def get_current_user(username: str = Depends(verify_token)):
 
 @app.get("/")
 def root():
-    return {"message": "Shadow Goose API v4.3.0", "status": "running", "features": ["auth", "projects", "rules_engine"]}
+    return {"message": "Shadow Goose API v4.3.0", "status": "running", "features": ["auth", "projects", "rules_engine", "deployment_workflows"]}
 
 @app.get("/health")
 def health():
@@ -103,7 +121,7 @@ def debug():
         "version": "4.3.0",
         "database_url": "set" if DATABASE_URL != "not_set" else "not_set",
         "secret_key": "set" if os.getenv("SECRET_KEY") else "not_set",
-        "features": ["in_memory_storage", "project_management", "user_management", "database_ready", "rules_engine"]
+        "features": ["in_memory_storage", "project_management", "user_management", "database_ready", "rules_engine", "deployment_workflows"]
     }
 
 @app.post("/auth/login")
@@ -178,6 +196,133 @@ def database_status():
         "database_url_configured": DATABASE_URL != "not_set",
         "database_url_length": len(DATABASE_URL) if DATABASE_URL else 0,
         "ready_for_database_integration": True
+    }
+
+# Deployment Workflow API Endpoints
+@app.post("/api/deployments")
+def create_deployment(deployment_data: DeploymentRequest, current_user = Depends(get_current_user)):
+    """Create a new deployment and process deployment rules"""
+    try:
+        deployment = {
+            "id": len(deployments_db) + 1,
+            "environment": deployment_data.environment,
+            "branch_name": deployment_data.branch_name,
+            "commit_message": deployment_data.commit_message,
+            "user_role": current_user["role"],
+            "deployment_id": deployment_data.deployment_id or f"deploy-{len(deployments_db) + 1}",
+            "priority": deployment_data.priority,
+            "security_scan_status": deployment_data.security_scan_status,
+            "status": "pending",
+            "created_by": current_user["id"],
+            "created_at": datetime.utcnow().isoformat()
+        }
+        deployments_db.append(deployment)
+        
+        # Process deployment rules
+        context = {
+            "deployment_environment": deployment_data.environment,
+            "branch_name": deployment_data.branch_name,
+            "commit_message": deployment_data.commit_message,
+            "user_role": current_user["role"],
+            "deployment_id": deployment["deployment_id"],
+            "priority": deployment_data.priority,
+            "security_scan_status": deployment_data.security_scan_status,
+            "deployment_status": "pending"
+        }
+        
+        rule_results = rules_engine.process_rules(context, [RuleType.WORKFLOW.value])
+        
+        return {
+            "deployment": deployment,
+            "rules_processed": rule_results
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create deployment: {str(e)}")
+
+@app.get("/api/deployments")
+def get_deployments(current_user = Depends(get_current_user)):
+    """Get all deployments"""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return {
+        "deployments": deployments_db,
+        "total_deployments": len(deployments_db)
+    }
+
+@app.post("/api/deployments/{deployment_id}/status")
+def update_deployment_status(deployment_id: str, status: str, current_user = Depends(get_current_user)):
+    """Update deployment status and trigger health check rules"""
+    try:
+        deployment = next((d for d in deployments_db if d["deployment_id"] == deployment_id), None)
+        if not deployment:
+            raise HTTPException(status_code=404, detail="Deployment not found")
+        
+        deployment["status"] = status
+        deployment["updated_at"] = datetime.utcnow().isoformat()
+        
+        # Process health check rules
+        context = {
+            "deployment_environment": deployment["environment"],
+            "deployment_status": status,
+            "deployment_id": deployment_id,
+            "user_role": current_user["role"]
+        }
+        
+        rule_results = rules_engine.process_rules(context, [RuleType.WORKFLOW.value])
+        
+        return {
+            "deployment": deployment,
+            "rules_processed": rule_results
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update deployment: {str(e)}")
+
+# Commit Workflow API Endpoints
+@app.post("/api/commits")
+def create_commit(commit_data: CommitRequest, current_user = Depends(get_current_user)):
+    """Create a new commit and process commit rules"""
+    try:
+        commit = {
+            "id": len(commits_db) + 1,
+            "branch_name": commit_data.branch_name,
+            "commit_message": commit_data.commit_message,
+            "user_role": current_user["role"],
+            "pr_id": commit_data.pr_id,
+            "files_changed": commit_data.files_changed,
+            "status": "pending",
+            "created_by": current_user["id"],
+            "created_at": datetime.utcnow().isoformat()
+        }
+        commits_db.append(commit)
+        
+        # Process commit rules
+        context = {
+            "branch_name": commit_data.branch_name,
+            "commit_message": commit_data.commit_message,
+            "user_role": current_user["role"],
+            "pr_id": commit_data.pr_id,
+            "files_changed": commit_data.files_changed
+        }
+        
+        rule_results = rules_engine.process_rules(context, [RuleType.WORKFLOW.value])
+        
+        return {
+            "commit": commit,
+            "rules_processed": rule_results
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create commit: {str(e)}")
+
+@app.get("/api/commits")
+def get_commits(current_user = Depends(get_current_user)):
+    """Get all commits"""
+    if current_user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return {
+        "commits": commits_db,
+        "total_commits": len(commits_db)
     }
 
 # Rules Engine API Endpoints
