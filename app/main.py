@@ -52,7 +52,6 @@ class DeploymentRequest(BaseModel):
     environment: str
     branch_name: str
     commit_message: str
-    user_role: str
     deployment_id: str = None
     priority: str = "normal"
     security_scan_status: str = "pending"
@@ -60,7 +59,6 @@ class DeploymentRequest(BaseModel):
 class CommitRequest(BaseModel):
     branch_name: str
     commit_message: str
-    user_role: str
     pr_id: str = None
     files_changed: list = []
 
