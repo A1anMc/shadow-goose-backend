@@ -7,7 +7,7 @@ from pydantic import BaseModel
 import jwt
 from datetime import datetime, timedelta
 
-app = FastAPI(title="Shadow Goose API", version="4.0.0")
+app = FastAPI(title="Shadow Goose API", version="4.1.0")
 
 # Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "shadow-goose-secret-key-2025-staging")
@@ -75,16 +75,16 @@ def get_current_user(username: str = Depends(verify_token)):
 
 @app.get("/")
 def root():
-    return {"message": "Shadow Goose API v4.0.0", "status": "running", "features": ["auth", "projects"]}
+    return {"message": "Shadow Goose API v4.1.0", "status": "running", "features": ["auth", "projects"]}
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "4.0.0"}
+    return {"status": "ok", "version": "4.1.0"}
 
 @app.get("/debug")
 def debug():
     return {
-        "version": "4.0.0",
+        "version": "4.1.0",
         "database_url": os.getenv("DATABASE_URL", "not_set"),
         "secret_key": "set" if os.getenv("SECRET_KEY") else "not_set",
         "features": ["in_memory_storage", "project_management", "user_management"]
@@ -117,19 +117,25 @@ def get_user_info(current_user = Depends(get_current_user)):
 
 @app.get("/api/projects")
 def get_projects(current_user = Depends(get_current_user)):
-    user_projects = [p for p in projects_db if p["created_by"] == current_user["id"]]
-    return {"projects": user_projects}
+    try:
+        user_projects = [p for p in projects_db if p["created_by"] == current_user["id"]]
+        return {"projects": user_projects}
+    except Exception as e:
+        return {"projects": [], "error": str(e)}
 
 @app.post("/api/projects")
 def create_project(project_data: ProjectCreate, current_user = Depends(get_current_user)):
-    project = {
-        "id": len(projects_db) + 1,
-        "name": project_data.name,
-        "description": project_data.description,
-        "status": project_data.status,
-        "created_by": current_user["id"],
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat()
-    }
-    projects_db.append(project)
-    return project 
+    try:
+        project = {
+            "id": len(projects_db) + 1,
+            "name": project_data.name,
+            "description": project_data.description,
+            "status": project_data.status,
+            "created_by": current_user["id"],
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        projects_db.append(project)
+        return project
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}") 
