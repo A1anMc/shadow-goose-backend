@@ -100,6 +100,15 @@ def get_current_user(username: str = Depends(verify_token), db: Session = Depend
 def health():
     return {"status": "ok"}
 
+@app.get("/debug")
+def debug():
+    return {
+        "version": "2.0.0",
+        "database_url": os.getenv("DATABASE_URL", "not_set"),
+        "secret_key": "set" if os.getenv("SECRET_KEY") else "not_set",
+        "features": ["database_integration", "project_management", "user_management"]
+    }
+
 @app.post("/auth/login")
 def login(login_data: LoginRequest, db: Session = Depends(get_db)):
     # Check if user exists in database
