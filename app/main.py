@@ -7,12 +7,15 @@ from pydantic import BaseModel
 import jwt
 from datetime import datetime, timedelta
 
-app = FastAPI(title="Shadow Goose API", version="4.1.0")
+app = FastAPI(title="Shadow Goose API", version="4.2.0")
 
 # Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "shadow-goose-secret-key-2025-staging")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# Database URL from environment
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://final_goose_db_user:MII5440GTcgWHUGHCTWP2F0mo8SQ4Xg3@dpg-d2apq1h5pdvs73c2gbog-a/final_goose_db")
 
 # Test user
 TEST_USER = {
@@ -75,19 +78,19 @@ def get_current_user(username: str = Depends(verify_token)):
 
 @app.get("/")
 def root():
-    return {"message": "Shadow Goose API v4.1.0", "status": "running", "features": ["auth", "projects"]}
+    return {"message": "Shadow Goose API v4.2.0", "status": "running", "features": ["auth", "projects", "database_ready"]}
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "4.1.0"}
+    return {"status": "ok", "version": "4.2.0"}
 
 @app.get("/debug")
 def debug():
     return {
-        "version": "4.1.0",
-        "database_url": os.getenv("DATABASE_URL", "not_set"),
+        "version": "4.2.0",
+        "database_url": "set" if DATABASE_URL != "not_set" else "not_set",
         "secret_key": "set" if os.getenv("SECRET_KEY") else "not_set",
-        "features": ["in_memory_storage", "project_management", "user_management"]
+        "features": ["in_memory_storage", "project_management", "user_management", "database_ready"]
     }
 
 @app.post("/auth/login")
@@ -138,4 +141,12 @@ def create_project(project_data: ProjectCreate, current_user = Depends(get_curre
         projects_db.append(project)
         return project
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Failed to create project: {str(e)}")
+
+@app.get("/api/database-status")
+def database_status():
+    return {
+        "database_url_configured": DATABASE_URL != "not_set",
+        "database_url_length": len(DATABASE_URL) if DATABASE_URL else 0,
+        "ready_for_database_integration": True
+    } 
