@@ -6,7 +6,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import jwt
 from datetime import datetime, timedelta
-from rules_engine import rules_engine, RuleType, ActionType, ConditionOperator
+from .rules_engine import rules_engine, RuleType, ActionType, ConditionOperator
 
 app = FastAPI(title="Shadow Goose API", version="4.3.0")
 
