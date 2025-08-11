@@ -18,26 +18,22 @@ from .grants import (
 import logging
 import time
 import psutil
+from datetime import datetime, timedelta
 
-app = FastAPI(title="Shadow Goose API", version="4.4.0")
+app = FastAPI(title="Shadow Goose API", version="4.5.0")
 
 # Configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "shadow-goose-secret-key-2025-staging")
-ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ALGORITHM = "HS256"
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
+DATABASE_URL = os.getenv("DATABASE_URL", "not_set")
 
-# Database URL from environment
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://final_goose_db_user:MII5440GTcgWHUGHCTWP2F0mo8SQ4Xg3@dpg-d2apq1h5pdvs73c2gbog-a/final_goose_db",
-)
-
-# Test user
+# Test user for development
 TEST_USER = {
     "username": "test",
     "password": "test",
     "email": "test@shadow-goose.com",
-    "role": "admin",
+    "role": "admin"
 }
 
 
@@ -330,7 +326,7 @@ async def startup_event():
 @app.get("/")
 def root():
     return {
-        "message": "Shadow Goose API v4.3.0",
+        "message": "Shadow Goose API v4.5.0",
         "status": "running",
         "features": ["auth", "projects", "rules_engine", "deployment_workflows"],
     }
@@ -339,7 +335,7 @@ def root():
 @app.get("/debug")
 def debug():
     return {
-        "version": "4.3.0",
+        "version": "4.5.0",
         "database_url": "set" if DATABASE_URL != "not_set" else "not_set",
         "secret_key": "set" if os.getenv("SECRET_KEY") else "not_set",
         "features": [
