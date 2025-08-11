@@ -7,8 +7,9 @@ from pydantic import BaseModel
 import jwt
 from datetime import datetime, timedelta
 from .rules_engine import rules_engine, RuleType, ActionType, ConditionOperator
+from .grants import grant_service, Grant, GrantApplication, GrantAnswer, GrantComment, GrantStatus, GrantPriority, GrantCategory
 
-app = FastAPI(title="Shadow Goose API", version="4.3.0")
+app = FastAPI(title="Shadow Goose API", version="4.4.0")
 
 # Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "shadow-goose-secret-key-2025-staging")
@@ -62,6 +63,33 @@ class CommitRequest(BaseModel):
     pr_id: str = None
     files_changed: list = []
 
+# Grant-related models
+class GrantSearchRequest(BaseModel):
+    category: str = None
+    min_amount: float = None
+    max_amount: float = None
+    deadline_before: str = None
+    keywords: str = None
+
+class GrantApplicationCreate(BaseModel):
+    grant_id: str
+    title: str
+    assigned_to: str
+    collaborators: list = []
+
+class GrantAnswerUpdate(BaseModel):
+    question: str
+    answer: str
+
+class GrantCommentCreate(BaseModel):
+    content: str
+
+class UserProfile(BaseModel):
+    preferred_categories: list = []
+    min_amount: float = None
+    max_amount: float = None
+    focus_areas: list = []
+
 # Security
 security = HTTPBearer()
 
@@ -100,10 +128,10 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 def get_current_user(username: str = Depends(verify_token)):
-    user = next((u for u in users_db if u["username"] == username), None)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+    for user in users_db:
+        if user["username"] == username:
+            return user
+    raise HTTPException(status_code=401, detail="User not found")
 
 @app.get("/")
 def root():
@@ -398,4 +426,223 @@ def test_rule(rule_data: RuleCreate, context_data: RuleContext):
         "rule_tested": rule_data.name,
         "context": context_data.context,
         "results": results
-    } 
+    }
+
+# Grant Management API Endpoints
+@app.get("/api/grants")
+def get_grants(current_user = Depends(get_current_user)):
+    """Get all available grants"""
+    try:
+        grants = grant_service.get_all_grants()
+        return {
+            "grants": [grant.dict() for grant in grants],
+            "total_grants": len(grants)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch grants: {str(e)}")
+
+@app.get("/api/grants/{grant_id}")
+def get_grant(grant_id: str, current_user = Depends(get_current_user)):
+    """Get a specific grant by ID"""
+    try:
+        grant = grant_service.get_grant_by_id(grant_id)
+        if not grant:
+            raise HTTPException(status_code=404, detail="Grant not found")
+        return grant.dict()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch grant: {str(e)}")
+
+@app.post("/api/grants/search")
+def search_grants(search_request: GrantSearchRequest, current_user = Depends(get_current_user)):
+    """Search grants with filters"""
+    try:
+        grants = grant_service.search_grants(
+            category=GrantCategory(search_request.category) if search_request.category else None,
+            min_amount=search_request.min_amount,
+            max_amount=search_request.max_amount,
+            deadline_before=datetime.fromisoformat(search_request.deadline_before) if search_request.deadline_before else None,
+            keywords=search_request.keywords
+        )
+        return {
+            "grants": [grant.dict() for grant in grants],
+            "total_results": len(grants),
+            "filters_applied": search_request.dict()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to search grants: {str(e)}")
+
+@app.post("/api/grants/recommendations")
+def get_grant_recommendations(user_profile: UserProfile, current_user = Depends(get_current_user)):
+    """Get AI-recommended grants based on user profile"""
+    try:
+        profile_dict = user_profile.dict()
+        recommendations = grant_service.get_recommended_grants(profile_dict)
+        return {
+            "recommendations": [grant.dict() for grant in recommendations],
+            "total_recommendations": len(recommendations),
+            "user_profile": profile_dict
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get recommendations: {str(e)}")
+
+@app.get("/api/grants/categories")
+def get_grant_categories():
+    """Get all available grant categories"""
+    return {
+        "categories": [category.value for category in GrantCategory],
+        "category_descriptions": {
+            "arts_culture": "Arts and cultural projects",
+            "community": "Community development and social impact",
+            "education": "Educational programs and initiatives",
+            "environment": "Environmental and sustainability projects",
+            "health": "Health and wellbeing programs",
+            "technology": "Technology and innovation projects",
+            "youth": "Youth-focused initiatives",
+            "indigenous": "Indigenous community projects",
+            "disability": "Disability support and inclusion",
+            "other": "Other project types"
+        }
+    }
+
+# Grant Applications API Endpoints
+@app.get("/api/grant-applications")
+def get_grant_applications(current_user = Depends(get_current_user)):
+    """Get all grant applications for the current user"""
+    try:
+        applications = grant_service.get_applications_by_user(current_user["username"])
+        return {
+            "applications": [app.dict() for app in applications],
+            "total_applications": len(applications)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch applications: {str(e)}")
+
+@app.get("/api/grant-applications/{application_id}")
+def get_grant_application(application_id: str, current_user = Depends(get_current_user)):
+    """Get a specific grant application"""
+    try:
+        application = grant_service.get_application_by_id(application_id)
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found")
+        
+        # Check if user has access to this application
+        if application.assigned_to != current_user["username"] and current_user["username"] not in application.collaborators:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        return application.dict()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch application: {str(e)}")
+
+@app.post("/api/grant-applications")
+def create_grant_application(application_data: GrantApplicationCreate, current_user = Depends(get_current_user)):
+    """Create a new grant application"""
+    try:
+        application = grant_service.create_application(
+            grant_id=application_data.grant_id,
+            title=application_data.title,
+            assigned_to=application_data.assigned_to,
+            collaborators=application_data.collaborators
+        )
+        return {
+            "message": "Grant application created successfully",
+            "application": application.dict()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create application: {str(e)}")
+
+@app.post("/api/grant-applications/{application_id}/answers")
+def update_application_answer(
+    application_id: str,
+    answer_data: GrantAnswerUpdate,
+    current_user = Depends(get_current_user)
+):
+    """Update or create an answer for a grant application"""
+    try:
+        answer = grant_service.update_application_answer(
+            application_id=application_id,
+            question=answer_data.question,
+            answer=answer_data.answer,
+            author=current_user["username"]
+        )
+        return {
+            "message": "Answer updated successfully",
+            "answer": answer.dict()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update answer: {str(e)}")
+
+@app.get("/api/grant-applications/{application_id}/answers")
+def get_application_answers(application_id: str, current_user = Depends(get_current_user)):
+    """Get all answers for a grant application"""
+    try:
+        answers = grant_service.get_application_answers(application_id)
+        return {
+            "answers": [answer.dict() for answer in answers],
+            "total_answers": len(answers)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch answers: {str(e)}")
+
+@app.post("/api/grant-applications/{application_id}/comments")
+def add_application_comment(
+    application_id: str,
+    comment_data: GrantCommentCreate,
+    current_user = Depends(get_current_user)
+):
+    """Add a comment to a grant application"""
+    try:
+        comment = grant_service.add_comment(
+            application_id=application_id,
+            content=comment_data.content,
+            author=current_user["username"]
+        )
+        return {
+            "message": "Comment added successfully",
+            "comment": comment.dict()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to add comment: {str(e)}")
+
+@app.get("/api/grant-applications/{application_id}/comments")
+def get_application_comments(application_id: str, current_user = Depends(get_current_user)):
+    """Get all comments for a grant application"""
+    try:
+        comments = grant_service.get_application_comments(application_id)
+        return {
+            "comments": [comment.dict() for comment in comments],
+            "total_comments": len(comments)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch comments: {str(e)}")
+
+@app.post("/api/grant-applications/{application_id}/submit")
+def submit_grant_application(application_id: str, current_user = Depends(get_current_user)):
+    """Submit a grant application"""
+    try:
+        success = grant_service.submit_application(application_id)
+        if success:
+            return {"message": "Application submitted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Application not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to submit application: {str(e)}")
+
+@app.get("/api/grant-applications/stats")
+def get_application_stats(current_user = Depends(get_current_user)):
+    """Get statistics for grant applications"""
+    try:
+        applications = grant_service.get_applications_by_user(current_user["username"])
+        
+        stats = {
+            "total_applications": len(applications),
+            "draft": len([app for app in applications if app.status == GrantStatus.DRAFT]),
+            "in_progress": len([app for app in applications if app.status == GrantStatus.IN_PROGRESS]),
+            "submitted": len([app for app in applications if app.status == GrantStatus.SUBMITTED]),
+            "approved": len([app for app in applications if app.status == GrantStatus.APPROVED]),
+            "rejected": len([app for app in applications if app.status == GrantStatus.REJECTED]),
+            "withdrawn": len([app for app in applications if app.status == GrantStatus.WITHDRAWN])
+        }
+        
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch stats: {str(e)}") 
