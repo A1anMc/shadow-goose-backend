@@ -20,6 +20,9 @@ import time
 import psutil
 from datetime import datetime, timedelta
 
+# Configure logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Shadow Goose API", version="4.5.0")
 
 # Configuration
