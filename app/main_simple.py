@@ -13,17 +13,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.get("/")
 def root():
     return {"message": "Shadow Goose API v3.0.0", "status": "running"}
+
 
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "3.0.0"}
 
+
 @app.get("/test")
 def test():
-    return {"message": "Database integration test", "database_url": os.getenv("DATABASE_URL", "not_set")}
+    return {
+        "message": "Database integration test",
+        "database_url": os.getenv("DATABASE_URL", "not_set"),
+    }
+
 
 @app.post("/auth/login")
 def login():
@@ -34,6 +41,6 @@ def login():
             "id": 1,
             "username": "test",
             "email": "test@shadow-goose.com",
-            "role": "admin"
-        }
-    } 
+            "role": "admin",
+        },
+    }

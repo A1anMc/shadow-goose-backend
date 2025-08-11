@@ -1,16 +1,43 @@
-import json
 import uuid
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, validator
 from enum import Enum
+import time
+
+# Advanced Quality Assurance Constants
+GRANT_AMOUNT_MIN = 1000.00
+GRANT_AMOUNT_MAX = 100000.00
+SUCCESS_SCORE_MIN = 0.0
+SUCCESS_SCORE_MAX = 1.0
+BUDGET_MIN = 100.00
+BUDGET_MAX = 50000.00
+
+# Currency and Localization Constants
+CURRENCY_CODE = "AUD"
+LOCALE = "en-AU"
+DATE_FORMAT = "DD/MM/YYYY"
+
+# Performance Monitoring
+PERFORMANCE_THRESHOLDS = {
+    "search_timeout_ms": 5000,
+    "max_results_per_page": 100,
+    "cache_ttl_seconds": 300,
+}
+
+# Audit Trail Configuration
+AUDIT_ENABLED = True
+AUDIT_RETENTION_DAYS = 90
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 # Grant Models
+
+
 class GrantStatus(str, Enum):
     DRAFT = "draft"
     IN_PROGRESS = "in_progress"
@@ -19,11 +46,13 @@ class GrantStatus(str, Enum):
     REJECTED = "rejected"
     WITHDRAWN = "withdrawn"
 
+
 class GrantPriority(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
+
 
 class GrantCategory(str, Enum):
     ARTS_CULTURE = "arts_culture"
@@ -37,80 +66,177 @@ class GrantCategory(str, Enum):
     DISABILITY = "disability"
     OTHER = "other"
 
+
+# Enhanced Grant model with advanced validation
+
+
 class Grant(BaseModel):
-    id: str = Field(..., description="Unique grant identifier")
-    title: str = Field(..., description="Grant title")
-    description: str = Field(..., description="Grant description")
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()), description="Unique grant identifier"
+    )
+    title: str = Field(..., min_length=5, max_length=200, description="Grant title")
+    description: str = Field(
+        ..., min_length=10, max_length=2000, description="Grant description"
+    )
     amount: float = Field(..., gt=0, description="Grant amount in AUD")
     deadline: datetime = Field(..., description="Application deadline")
     category: GrantCategory = Field(..., description="Grant category")
-    eligibility: List[str] = Field(default_factory=list, description="Eligibility criteria")
-    requirements: List[str] = Field(default_factory=list, description="Application requirements")
-    contact_info: Dict[str, str] = Field(..., description="Contact information")
-    website: str = Field(..., description="Grant website URL")
-    source: str = Field(..., description="Grant source organisation")
-    success_score: float = Field(default=0.0, ge=0.0, le=1.0, description="AI success probability score")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
-    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update timestamp")
+    priority: GrantPriority = Field(
+        default=GrantPriority.MEDIUM, description="Grant priority"
+    )
+    status: GrantStatus = Field(default=GrantStatus.DRAFT, description="Grant status")
+    organisation: str = Field(
+        ..., min_length=2, max_length=100, description="Granting organisation"
+    )
+    eligibility_criteria: List[str] = Field(
+        default_factory=list, description="Eligibility criteria"
+    )
+    required_documents: List[str] = Field(
+        default_factory=list, description="Required documents"
+    )
+    success_score: float = Field(
+        default=0.5, ge=0.0, le=1.0, description="AI success prediction score"
+    )
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow, description="Creation timestamp"
+    )
+    updated_at: datetime = Field(
+        default_factory=datetime.utcnow, description="Last update timestamp"
+    )
 
-    @validator('amount')
+    # Advanced validation with specific error messages
+    @validator("amount")
     def validate_amount(cls, v):
-        if v <= 0:
-            raise ValueError('Grant amount must be positive')
-        return round(v, 2)  # Ensure precision to 2 decimal places
+        if not (GRANT_AMOUNT_MIN <= v <= GRANT_AMOUNT_MAX):
+            raise ValueError(
+                f"Grant amount must be between {cls.format_currency(GRANT_AMOUNT_MIN)} "
+                f"and {cls.format_currency(GRANT_AMOUNT_MAX)}. "
+                f"Current value: {cls.format_currency(v)}"
+            )
+        return round(v, 2)  # Ensure 2 decimal places for currency
 
-    @validator('success_score')
+    @validator("success_score")
     def validate_success_score(cls, v):
-        if not 0.0 <= v <= 1.0:
-            raise ValueError('Success score must be between 0.0 and 1.0')
-        return round(v, 3)  # Ensure precision to 3 decimal places
+        if not (SUCCESS_SCORE_MIN <= v <= SUCCESS_SCORE_MAX):
+            raise ValueError(
+                f"Success score must be between {SUCCESS_SCORE_MIN} and {SUCCESS_SCORE_MAX}. "
+                f"Current value: {v}"
+            )
+        return round(v, 3)  # Ensure 3 decimal places for precision
 
-    def format_amount_aud(self) -> str:
-        """Format amount in Australian Dollar format"""
+    @validator("deadline")
+    def validate_deadline(cls, v):
+        if v <= datetime.utcnow():
+            raise ValueError("Deadline must be in the future")
+        return v
+
+    # Currency formatting with locale awareness
+    @staticmethod
+    def format_currency(amount: float) -> str:
+        """Format currency amount with proper locale and error handling"""
         try:
-            return f"AUD ${self.amount:,.2f}"
-        except Exception as e:
-            logger.error(f"Error formatting amount {self.amount}: {e}")
-            return f"AUD ${self.amount:.2f}"
+            return f"AUD ${amount:,.2f}"
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Currency formatting failed for amount {amount}: {e}")
+            return f"AUD ${amount}"
 
+    # Date formatting with UK locale
     def format_deadline_uk(self) -> str:
-        """Format deadline in UK date format"""
+        """Format deadline in UK date format with error handling"""
         try:
             return self.deadline.strftime("%d/%m/%Y")
-        except Exception as e:
-            logger.error(f"Error formatting deadline {self.deadline}: {e}")
-            return "Invalid date"
+        except (AttributeError, ValueError) as e:
+            logger.warning(f"Date formatting failed for deadline {self.deadline}: {e}")
+            return str(self.deadline)
+
+    # Audit trail method
+    def log_audit_event(
+        self, action: str, user_id: str, details: Dict[str, Any] = None
+    ):
+        """Log audit event for data integrity tracking"""
+        if not AUDIT_ENABLED:
+            return
+
+        audit_event = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "action": action,
+            "user_id": user_id,
+            "grant_id": self.id,
+            "details": details or {},
+        }
+
+        logger.info("Audit event logged", extra=audit_event)
+
 
 class GrantApplication(BaseModel):
     id: str = Field(..., description="Unique application identifier")
     grant_id: str = Field(..., description="Associated grant ID")
-    title: str = Field(..., description="Application title")
-    status: GrantStatus = Field(default=GrantStatus.DRAFT, description="Application status")
-    priority: GrantPriority = Field(default=GrantPriority.MEDIUM, description="Application priority")
+    title: str = Field(
+        ..., min_length=5, max_length=200, description="Application title"
+    )
+    status: GrantStatus = Field(
+        default=GrantStatus.DRAFT, description="Application status"
+    )
+    priority: GrantPriority = Field(
+        default=GrantPriority.MEDIUM, description="Application priority"
+    )
     assigned_to: str = Field(..., description="Primary assignee")
-    collaborators: List[str] = Field(default_factory=list, description="Team collaborators")
-    answers: Dict[str, str] = Field(default_factory=dict, description="Application answers")
+    collaborators: List[str] = Field(
+        default_factory=list, description="Team collaborators"
+    )
+    answers: Dict[str, str] = Field(
+        default_factory=dict, description="Application answers"
+    )
     documents: List[str] = Field(default_factory=list, description="Attached documents")
-    budget: float = Field(default=0.0, ge=0.0, description="Project budget in AUD")
+    budget: float = Field(..., gt=0, description="Project budget in AUD")
     timeline: str = Field(default="", description="Project timeline")
     impact_statement: str = Field(default="", description="Impact statement")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
-    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update timestamp")
-    submitted_at: Optional[datetime] = Field(default=None, description="Submission timestamp")
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow, description="Creation timestamp"
+    )
+    updated_at: datetime = Field(
+        default_factory=datetime.utcnow, description="Last update timestamp"
+    )
+    submitted_at: Optional[datetime] = Field(
+        default=None, description="Submission timestamp"
+    )
 
-    @validator('budget')
+    @validator("budget")
     def validate_budget(cls, v):
-        if v < 0:
-            raise ValueError('Budget cannot be negative')
-        return round(v, 2)  # Ensure precision to 2 decimal places
+        if not (BUDGET_MIN <= v <= BUDGET_MAX):
+            raise ValueError(
+                f"Budget must be between {cls.format_currency(BUDGET_MIN)} "
+                f"and {cls.format_currency(BUDGET_MAX)}. "
+                f"Current value: {cls.format_currency(v)}"
+            )
+        return round(v, 2)
 
-    def format_budget_aud(self) -> str:
-        """Format budget in Australian Dollar format"""
+    @staticmethod
+    def format_currency(amount: float) -> str:
+        """Format currency amount with proper locale and error handling"""
         try:
-            return f"AUD ${self.budget:,.2f}"
-        except Exception as e:
-            logger.error(f"Error formatting budget {self.budget}: {e}")
-            return f"AUD ${self.budget:.2f}"
+            return f"AUD ${amount:,.2f}"
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Currency formatting failed for amount {amount}: {e}")
+            return f"AUD ${amount}"
+
+    def log_audit_event(
+        self, action: str, user_id: str, details: Dict[str, Any] = None
+    ):
+        """Log audit event for data integrity tracking"""
+        if not AUDIT_ENABLED:
+            return
+
+        audit_event = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "action": action,
+            "user_id": user_id,
+            "application_id": self.id,
+            "details": details or {},
+        }
+
+        logger.info("Audit event logged", extra=audit_event)
+
 
 class GrantAnswer(BaseModel):
     id: str = Field(..., description="Unique answer identifier")
@@ -119,15 +245,23 @@ class GrantAnswer(BaseModel):
     answer: str = Field(..., description="Answer text")
     author: str = Field(..., description="Answer author")
     version: int = Field(..., ge=1, description="Answer version number")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
-    updated_at: datetime = Field(default_factory=datetime.utcnow, description="Last update timestamp")
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow, description="Creation timestamp"
+    )
+    updated_at: datetime = Field(
+        default_factory=datetime.utcnow, description="Last update timestamp"
+    )
+
 
 class GrantComment(BaseModel):
     id: str = Field(..., description="Unique comment identifier")
     application_id: str = Field(..., description="Associated application ID")
     author: str = Field(..., description="Comment author")
     content: str = Field(..., description="Comment content")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow, description="Creation timestamp"
+    )
+
 
 # In-memory storage for testing (will be replaced with database)
 grants_db: List[Grant] = []
@@ -135,7 +269,7 @@ applications_db: List[GrantApplication] = []
 answers_db: List[GrantAnswer] = []
 comments_db: List[GrantComment] = []
 
-# Sample grants data with proper AUD amounts
+# Sample grants data with proper AUD amounts and updated structure
 SAMPLE_GRANTS = [
     {
         "id": "grant_001",
@@ -144,14 +278,21 @@ SAMPLE_GRANTS = [
         "amount": 50000.00,
         "deadline": datetime.now() + timedelta(days=30),
         "category": GrantCategory.ARTS_CULTURE,
-        "eligibility": ["Non-profit organisations", "Creative businesses", "Individual artists"],
-        "requirements": ["Project proposal", "Budget breakdown", "Timeline", "Impact assessment"],
-        "contact_info": {"email": "grants@creative.vic.gov.au", "phone": "03 8683 3100"},
-        "website": "https://creative.vic.gov.au/grants",
-        "source": "Creative Victoria",
+        "organisation": "Creative Victoria",
+        "eligibility_criteria": [
+            "Non-profit organisations",
+            "Creative businesses",
+            "Individual artists",
+        ],
+        "required_documents": [
+            "Project proposal",
+            "Budget breakdown",
+            "Timeline",
+            "Impact assessment",
+        ],
         "success_score": 0.850,
         "created_at": datetime.now(),
-        "updated_at": datetime.now()
+        "updated_at": datetime.now(),
     },
     {
         "id": "grant_002",
@@ -160,14 +301,20 @@ SAMPLE_GRANTS = [
         "amount": 25000.00,
         "deadline": datetime.now() + timedelta(days=45),
         "category": GrantCategory.COMMUNITY,
-        "eligibility": ["Community organisations", "Social enterprises", "Non-profits"],
-        "requirements": ["Community consultation", "Impact measurement plan", "Partnership details"],
-        "contact_info": {"email": "impact@community.gov.au", "phone": "03 9208 3333"},
-        "website": "https://community.gov.au/impact-fund",
-        "source": "Department of Communities",
+        "organisation": "Department of Communities",
+        "eligibility_criteria": [
+            "Community organisations",
+            "Social enterprises",
+            "Non-profits",
+        ],
+        "required_documents": [
+            "Community consultation",
+            "Impact measurement plan",
+            "Partnership details",
+        ],
         "success_score": 0.920,
         "created_at": datetime.now(),
-        "updated_at": datetime.now()
+        "updated_at": datetime.now(),
     },
     {
         "id": "grant_003",
@@ -176,15 +323,21 @@ SAMPLE_GRANTS = [
         "amount": 15000.00,
         "deadline": datetime.now() + timedelta(days=60),
         "category": GrantCategory.YOUTH,
-        "eligibility": ["Youth-led organisations", "Young entrepreneurs", "Youth groups"],
-        "requirements": ["Youth leadership", "Innovation component", "Community benefit"],
-        "contact_info": {"email": "youth@innovation.gov.au", "phone": "03 9208 4444"},
-        "website": "https://youth.gov.au/innovation-grant",
-        "source": "Youth Affairs Victoria",
+        "organisation": "Youth Affairs Victoria",
+        "eligibility_criteria": [
+            "Youth-led organisations",
+            "Young entrepreneurs",
+            "Youth groups",
+        ],
+        "required_documents": [
+            "Youth leadership",
+            "Innovation component",
+            "Community benefit",
+        ],
         "success_score": 0.780,
         "created_at": datetime.now(),
-        "updated_at": datetime.now()
-    }
+        "updated_at": datetime.now(),
+    },
 ]
 
 # Initialize sample data
@@ -195,118 +348,285 @@ for grant_data in SAMPLE_GRANTS:
     except Exception as e:
         logger.error(f"Error initialising grant {grant_data['title']}: {e}")
 
+
+# Enhanced GrantService with performance monitoring and data quality
+
+
 class GrantService:
+    """Enhanced grant service with advanced quality assurance"""
+
+    def __init__(self):
+        self._cache = {}
+        self._cache_timestamps = {}
+        self._performance_metrics = {
+            "total_requests": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "average_response_time_ms": 0,
+        }
+
+    def _log_performance(self, operation: str, start_time: float, success: bool = True):
+        """Log performance metrics for monitoring"""
+        response_time = (time.time() - start_time) * 1000
+        self._performance_metrics["total_requests"] += 1
+        self._performance_metrics["average_response_time_ms"] = (
+            self._performance_metrics["average_response_time_ms"]
+            * (self._performance_metrics["total_requests"] - 1)
+            + response_time
+        ) / self._performance_metrics["total_requests"]
+
+        logger.info(
+            "Performance metric recorded",
+            extra={
+                "operation": operation,
+                "response_time_ms": round(response_time, 2),
+                "success": success,
+                "average_response_time_ms": round(
+                    self._performance_metrics["average_response_time_ms"], 2
+                ),
+            },
+        )
+
+    def _get_cached_data(self, key: str) -> Optional[Any]:
+        """Get data from cache with TTL validation"""
+        if key in self._cache:
+            timestamp = self._cache_timestamps.get(key, 0)
+            if time.time() - timestamp < PERFORMANCE_THRESHOLDS["cache_ttl_seconds"]:
+                self._performance_metrics["cache_hits"] += 1
+                return self._cache[key]
+            else:
+                # Remove expired cache entry
+                del self._cache[key]
+                del self._cache_timestamps[key]
+
+        self._performance_metrics["cache_misses"] += 1
+        return None
+
+    def _set_cached_data(self, key: str, data: Any):
+        """Set data in cache with timestamp"""
+        self._cache[key] = data
+        self._cache_timestamps[key] = time.time()
+
     @staticmethod
     def get_all_grants() -> List[Grant]:
-        """Get all available grants"""
+        """Get all grants with performance monitoring"""
+        start_time = time.time()
+
         try:
-            logger.info(f"Retrieved {len(grants_db)} grants")
-            return grants_db
+            # Check cache first
+            cache_key = "all_grants"
+            cached_grants = grant_service._get_cached_data(cache_key)
+            if cached_grants:
+                grant_service._log_performance("get_all_grants", start_time)
+                return cached_grants
+
+            # Get from database
+            grants = SAMPLE_GRANTS.copy()
+
+            # Cache the result
+            grant_service._set_cached_data(cache_key, grants)
+
+            grant_service._log_performance("get_all_grants", start_time)
+            logger.info(
+                "All grants retrieved successfully", extra={"count": len(grants)}
+            )
+            return grants
+
         except Exception as e:
-            logger.error(f"Error retrieving grants: {e}")
-            return []
-    
+            grant_service._log_performance("get_all_grants", start_time, success=False)
+            logger.error("Failed to retrieve grants", extra={"error": str(e)})
+            raise
+
     @staticmethod
     def get_grant_by_id(grant_id: str) -> Optional[Grant]:
-        """Get a specific grant by ID"""
+        """Get grant by ID with validation and error handling"""
+        start_time = time.time()
+
         try:
-            for grant in grants_db:
-                if grant.id == grant_id:
-                    logger.info(f"Retrieved grant: {grant.title}")
-                    return grant
-            logger.warning(f"Grant not found: {grant_id}")
+            # Validate input
+            if not grant_id or not isinstance(grant_id, str):
+                raise ValueError("Invalid grant ID provided")
+
+            # Check cache first
+            cache_key = f"grant_{grant_id}"
+            cached_grant = grant_service._get_cached_data(cache_key)
+            if cached_grant:
+                grant_service._log_performance("get_grant_by_id", start_time)
+                return cached_grant
+
+            # Get from database
+            for grant in SAMPLE_GRANTS:
+                if grant["id"] == grant_id:
+                    grant_obj = Grant(**grant)
+
+                    # Cache the result
+                    grant_service._set_cached_data(cache_key, grant_obj)
+
+                    grant_service._log_performance("get_grant_by_id", start_time)
+                    logger.info(
+                        "Grant retrieved successfully", extra={"grant_id": grant_id}
+                    )
+                    return grant_obj
+
+            logger.warning("Grant not found", extra={"grant_id": grant_id})
             return None
+
         except Exception as e:
-            logger.error(f"Error retrieving grant {grant_id}: {e}")
-            return None
-    
+            grant_service._log_performance("get_grant_by_id", start_time, success=False)
+            logger.error(
+                "Failed to retrieve grant",
+                extra={"grant_id": grant_id, "error": str(e)},
+            )
+            raise
+
     @staticmethod
     def search_grants(
+        keywords: Optional[str] = None,
         category: Optional[GrantCategory] = None,
         min_amount: Optional[float] = None,
         max_amount: Optional[float] = None,
         deadline_before: Optional[datetime] = None,
-        keywords: Optional[str] = None
+        limit: int = PERFORMANCE_THRESHOLDS["max_results_per_page"],
     ) -> List[Grant]:
-        """Search grants with filters"""
+        """Search grants with comprehensive filtering and performance monitoring"""
+        start_time = time.time()
+
         try:
-            results = grants_db.copy()
-            
-            if category:
-                results = [g for g in results if g.category == category]
-            
-            if min_amount is not None:
-                results = [g for g in results if g.amount >= min_amount]
-            
-            if max_amount is not None:
-                results = [g for g in results if g.amount <= max_amount]
-            
-            if deadline_before:
-                results = [g for g in results if g.deadline <= deadline_before]
-            
-            if keywords:
-                keywords_lower = keywords.lower()
-                results = [g for g in results if 
-                          keywords_lower in g.title.lower() or 
-                          keywords_lower in g.description.lower()]
-            
-            # Sort by success score (highest first)
-            results.sort(key=lambda x: x.success_score, reverse=True)
-            
-            logger.info(f"Grant search returned {len(results)} results")
+            # Validate inputs
+            if min_amount is not None and (
+                min_amount < 0 or min_amount > GRANT_AMOUNT_MAX
+            ):
+                raise ValueError(
+                    f"Invalid min_amount: must be between 0 and {GRANT_AMOUNT_MAX}"
+                )
+
+            if max_amount is not None and (
+                max_amount < 0 or max_amount > GRANT_AMOUNT_MAX
+            ):
+                raise ValueError(
+                    f"Invalid max_amount: must be between 0 and {GRANT_AMOUNT_MAX}"
+                )
+
+            if limit > PERFORMANCE_THRESHOLDS["max_results_per_page"]:
+                limit = PERFORMANCE_THRESHOLDS["max_results_per_page"]
+
+            # Check cache
+            cache_key = f"search_{hash((keywords, category, min_amount, max_amount, deadline_before, limit))}"
+            cached_results = grant_service._get_cached_data(cache_key)
+            if cached_results:
+                grant_service._log_performance("search_grants", start_time)
+                return cached_results
+
+            # Perform search
+            results = []
+            for grant_data in SAMPLE_GRANTS:
+                grant = Grant(**grant_data)
+
+                # Apply filters
+                if (
+                    keywords
+                    and keywords.lower() not in grant.title.lower()
+                    and keywords.lower() not in grant.description.lower()
+                ):
+                    continue
+
+                if category and grant.category != category:
+                    continue
+
+                if min_amount is not None and grant.amount < min_amount:
+                    continue
+
+                if max_amount is not None and grant.amount > max_amount:
+                    continue
+
+                if deadline_before and grant.deadline > deadline_before:
+                    continue
+
+                results.append(grant)
+
+                # Apply limit
+                if len(results) >= limit:
+                    break
+
+            # Cache results
+            grant_service._set_cached_data(cache_key, results)
+
+            grant_service._log_performance("search_grants", start_time)
+            logger.info(
+                "Grant search completed",
+                extra={
+                    "results_count": len(results),
+                    "filters_applied": {
+                        "keywords": keywords,
+                        "category": category,
+                        "min_amount": min_amount,
+                        "max_amount": max_amount,
+                        "deadline_before": deadline_before,
+                    },
+                },
+            )
+
             return results
+
         except Exception as e:
-            logger.error(f"Error searching grants: {e}")
-            return []
-    
+            grant_service._log_performance("search_grants", start_time, success=False)
+            logger.error("Grant search failed", extra={"error": str(e)})
+            raise
+
     @staticmethod
     def get_recommended_grants(user_profile: Dict) -> List[Grant]:
         """Get AI-recommended grants based on user profile"""
         try:
             recommendations = []
-            
+
             for grant in grants_db:
                 score = 0.0
-                
+
                 # Category preference
-                if user_profile.get("preferred_categories") and grant.category in user_profile["preferred_categories"]:
+                if (
+                    user_profile.get("preferred_categories")
+                    and grant.category in user_profile["preferred_categories"]
+                ):
                     score += 0.3
-                
+
                 # Amount range
-                if user_profile.get("min_amount") and grant.amount >= user_profile["min_amount"]:
+                if (
+                    user_profile.get("min_amount")
+                    and grant.amount >= user_profile["min_amount"]
+                ):
                     score += 0.2
-                if user_profile.get("max_amount") and grant.amount <= user_profile["max_amount"]:
+                if (
+                    user_profile.get("max_amount")
+                    and grant.amount <= user_profile["max_amount"]
+                ):
                     score += 0.2
-                
+
                 # Deadline urgency
                 days_until_deadline = (grant.deadline - datetime.now()).days
                 if days_until_deadline <= 30:
                     score += 0.2
                 elif days_until_deadline <= 60:
                     score += 0.1
-                
+
                 # Base success score
                 score += grant.success_score * 0.1
-                
+
                 if score > 0.3:  # Only recommend if score is reasonable
                     recommendations.append((grant, score))
-            
+
             # Sort by recommendation score
             recommendations.sort(key=lambda x: x[1], reverse=True)
             result = [grant for grant, score in recommendations[:10]]
-            
+
             logger.info(f"Generated {len(result)} grant recommendations")
             return result
         except Exception as e:
             logger.error(f"Error generating recommendations: {e}")
             return []
-    
+
     @staticmethod
     def create_application(
-        grant_id: str,
-        title: str,
-        assigned_to: str,
-        collaborators: List[str] = None
+        grant_id: str, title: str, assigned_to: str, collaborators: List[str] = None
     ) -> GrantApplication:
         """Create a new grant application"""
         try:
@@ -324,22 +644,23 @@ class GrantService:
                 timeline="",
                 impact_statement="",
                 created_at=datetime.now(),
-                updated_at=datetime.now()
+                updated_at=datetime.now(),
             )
-            
+
             applications_db.append(application)
             logger.info(f"Created application: {application.title}")
             return application
         except Exception as e:
             logger.error(f"Error creating application: {e}")
             raise
-    
+
     @staticmethod
     def get_applications_by_user(user_id: str) -> List[GrantApplication]:
         """Get all applications for a user (assigned or collaborating)"""
         try:
             result = [
-                app for app in applications_db 
+                app
+                for app in applications_db
                 if app.assigned_to == user_id or user_id in app.collaborators
             ]
             logger.info(f"Retrieved {len(result)} applications for user {user_id}")
@@ -347,7 +668,7 @@ class GrantService:
         except Exception as e:
             logger.error(f"Error retrieving applications for user {user_id}: {e}")
             return []
-    
+
     @staticmethod
     def get_application_by_id(application_id: str) -> Optional[GrantApplication]:
         """Get a specific application by ID"""
@@ -361,13 +682,10 @@ class GrantService:
         except Exception as e:
             logger.error(f"Error retrieving application {application_id}: {e}")
             return None
-    
+
     @staticmethod
     def update_application_answer(
-        application_id: str,
-        question: str,
-        answer: str,
-        author: str
+        application_id: str, question: str, answer: str, author: str
     ) -> GrantAnswer:
         """Update or create an answer for a grant application"""
         try:
@@ -377,7 +695,7 @@ class GrantService:
                 if ans.application_id == application_id and ans.question == question:
                     existing_answer = ans
                     break
-            
+
             if existing_answer:
                 # Create new version
                 new_answer = GrantAnswer(
@@ -388,7 +706,7 @@ class GrantService:
                     author=author,
                     version=existing_answer.version + 1,
                     created_at=datetime.now(),
-                    updated_at=datetime.now()
+                    updated_at=datetime.now(),
                 )
             else:
                 # Create first answer
@@ -400,30 +718,26 @@ class GrantService:
                     author=author,
                     version=1,
                     created_at=datetime.now(),
-                    updated_at=datetime.now()
+                    updated_at=datetime.now(),
                 )
-            
+
             answers_db.append(new_answer)
-            
+
             # Update application
             for app in applications_db:
                 if app.id == application_id:
                     app.answers[question] = answer
                     app.updated_at = datetime.now()
                     break
-            
+
             logger.info(f"Updated answer for application {application_id}")
             return new_answer
         except Exception as e:
             logger.error(f"Error updating answer: {e}")
             raise
-    
+
     @staticmethod
-    def add_comment(
-        application_id: str,
-        content: str,
-        author: str
-    ) -> GrantComment:
+    def add_comment(application_id: str, content: str, author: str) -> GrantComment:
         """Add a comment to a grant application"""
         try:
             comment = GrantComment(
@@ -431,38 +745,46 @@ class GrantService:
                 application_id=application_id,
                 author=author,
                 content=content,
-                created_at=datetime.now()
+                created_at=datetime.now(),
             )
-            
+
             comments_db.append(comment)
             logger.info(f"Added comment to application {application_id}")
             return comment
         except Exception as e:
             logger.error(f"Error adding comment: {e}")
             raise
-    
+
     @staticmethod
     def get_application_comments(application_id: str) -> List[GrantComment]:
         """Get all comments for an application"""
         try:
             result = [c for c in comments_db if c.application_id == application_id]
-            logger.info(f"Retrieved {len(result)} comments for application {application_id}")
+            logger.info(
+                f"Retrieved {len(result)} comments for application {application_id}"
+            )
             return result
         except Exception as e:
-            logger.error(f"Error retrieving comments for application {application_id}: {e}")
+            logger.error(
+                f"Error retrieving comments for application {application_id}: {e}"
+            )
             return []
-    
+
     @staticmethod
     def get_application_answers(application_id: str) -> List[GrantAnswer]:
         """Get all answers for an application"""
         try:
             result = [a for a in answers_db if a.application_id == application_id]
-            logger.info(f"Retrieved {len(result)} answers for application {application_id}")
+            logger.info(
+                f"Retrieved {len(result)} answers for application {application_id}"
+            )
             return result
         except Exception as e:
-            logger.error(f"Error retrieving answers for application {application_id}: {e}")
+            logger.error(
+                f"Error retrieving answers for application {application_id}: {e}"
+            )
             return []
-    
+
     @staticmethod
     def submit_application(application_id: str) -> bool:
         """Submit a grant application"""
@@ -480,5 +802,22 @@ class GrantService:
             logger.error(f"Error submitting application {application_id}: {e}")
             return False
 
-# Global grant service instance
-grant_service = GrantService() 
+    def get_performance_metrics(self) -> Dict[str, Any]:
+        """Get performance metrics for monitoring"""
+        return {
+            "total_requests": self._performance_metrics["total_requests"],
+            "cache_hits": self._performance_metrics["cache_hits"],
+            "cache_misses": self._performance_metrics["cache_misses"],
+            "cache_hit_rate": (
+                self._performance_metrics["cache_hits"]
+                / max(self._performance_metrics["total_requests"], 1)
+            ),
+            "average_response_time_ms": round(
+                self._performance_metrics["average_response_time_ms"], 2
+            ),
+            "cache_size": len(self._cache),
+        }
+
+
+# Initialize the enhanced service
+grant_service = GrantService()

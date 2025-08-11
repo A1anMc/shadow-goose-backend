@@ -5,7 +5,10 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 
 # Database URL from environment
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://final_goose_db_user:MII5440GTcgWHUGHCTWP2F0mo8SQ4Xg3@dpg-d2apq1h5pdvs73c2gbog-a/final_goose_db")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://final_goose_db_user:MII5440GTcgWHUGHCTWP2F0mo8SQ4Xg3@dpg-d2apq1h5pdvs73c2gbog-a/final_goose_db",
+)
 
 # Create engine
 engine = create_engine(DATABASE_URL)
@@ -13,6 +16,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Base class for models
 Base = declarative_base()
+
 
 # Database dependency
 def get_db():
@@ -22,10 +26,11 @@ def get_db():
     finally:
         db.close()
 
+
 # User model
 class User(Base):
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True)
@@ -33,10 +38,11 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
 
+
 # Project model
 class Project(Base):
     __tablename__ = "projects"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     description = Column(Text)
@@ -45,10 +51,11 @@ class Project(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
 # Grant model
 class Grant(Base):
     __tablename__ = "grants"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, index=True)
     name = Column(String, index=True)
@@ -58,6 +65,7 @@ class Grant(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
 # Create tables
 def create_tables():
-    Base.metadata.create_all(bind=engine) 
+    Base.metadata.create_all(bind=engine)

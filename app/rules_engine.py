@@ -1,11 +1,10 @@
-import json
 import re
-from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Union
 from enum import Enum
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 class RuleType(Enum):
     PROJECT_APPROVAL = "project_approval"
@@ -14,6 +13,7 @@ class RuleType(Enum):
     NOTIFICATION = "notification"
     WORKFLOW = "workflow"
     COMPLIANCE = "compliance"
+
 
 class ConditionOperator(Enum):
     EQUALS = "equals"
@@ -30,6 +30,7 @@ class ConditionOperator(Enum):
     EXISTS = "exists"
     NOT_EXISTS = "not_exists"
 
+
 class ActionType(Enum):
     SEND_NOTIFICATION = "send_notification"
     UPDATE_STATUS = "update_status"
@@ -40,13 +41,14 @@ class ActionType(Enum):
     LOG_EVENT = "log_event"
     TRIGGER_WORKFLOW = "trigger_workflow"
 
+
 class RulesEngine:
     def __init__(self):
         self.rules: List[Dict] = []
         self.context: Dict[str, Any] = {}
         self.action_handlers: Dict[str, callable] = {}
         self._register_default_handlers()
-    
+
     def _register_default_handlers(self):
         """Register default action handlers"""
         self.action_handlers = {
@@ -57,9 +59,9 @@ class RulesEngine:
             ActionType.CREATE_TASK.value: self._create_task,
             ActionType.UPDATE_PROJECT.value: self._update_project,
             ActionType.LOG_EVENT.value: self._log_event,
-            ActionType.TRIGGER_WORKFLOW.value: self._trigger_workflow
+            ActionType.TRIGGER_WORKFLOW.value: self._trigger_workflow,
         }
-    
+
     def add_rule(self, rule: Dict) -> bool:
         """Add a new rule to the engine"""
         try:
@@ -70,38 +72,38 @@ class RulesEngine:
         except Exception as e:
             logger.error(f"Failed to add rule: {e}")
             return False
-    
+
     def _validate_rule(self, rule: Dict):
         """Validate rule structure"""
-        required_fields = ['name', 'rule_type', 'conditions', 'actions']
+        required_fields = ["name", "rule_type", "conditions", "actions"]
         for field in required_fields:
             if field not in rule:
                 raise ValueError(f"Missing required field: {field}")
-        
-        if not isinstance(rule['conditions'], list):
+
+        if not isinstance(rule["conditions"], list):
             raise ValueError("Conditions must be a list")
-        
-        if not isinstance(rule['actions'], list):
+
+        if not isinstance(rule["actions"], list):
             raise ValueError("Actions must be a list")
-    
+
     def evaluate_conditions(self, conditions: List[Dict], context: Dict) -> bool:
         """Evaluate all conditions against the context"""
         for condition in conditions:
             if not self._evaluate_condition(condition, context):
                 return False
         return True
-    
+
     def _evaluate_condition(self, condition: Dict, context: Dict) -> bool:
         """Evaluate a single condition"""
-        field = condition.get('field')
-        operator = condition.get('operator')
-        value = condition.get('value')
-        
+        field = condition.get("field")
+        operator = condition.get("operator")
+        value = condition.get("value")
+
         if field not in context:
             return operator == ConditionOperator.NOT_EXISTS.value
-        
+
         context_value = context[field]
-        
+
         try:
             if operator == ConditionOperator.EQUALS.value:
                 return context_value == value
@@ -135,179 +137,179 @@ class RulesEngine:
         except Exception as e:
             logger.error(f"Error evaluating condition: {e}")
             return False
-    
+
     def execute_actions(self, actions: List[Dict], context: Dict) -> List[Dict]:
         """Execute all actions and return results"""
         results = []
         for action in actions:
             try:
                 result = self._execute_action(action, context)
-                results.append({
-                    'action': action.get('type'),
-                    'success': True,
-                    'result': result
-                })
+                results.append(
+                    {"action": action.get("type"), "success": True, "result": result}
+                )
             except Exception as e:
                 logger.error(f"Action execution failed: {e}")
-                results.append({
-                    'action': action.get('type'),
-                    'success': False,
-                    'error': str(e)
-                })
+                results.append(
+                    {"action": action.get("type"), "success": False, "error": str(e)}
+                )
         return results
-    
+
     def _execute_action(self, action: Dict, context: Dict) -> Any:
         """Execute a single action"""
-        action_type = action.get('type')
-        params = action.get('params', {})
-        
+        action_type = action.get("type")
+        params = action.get("params", {})
+
         if action_type in self.action_handlers:
             return self.action_handlers[action_type](params, context)
         else:
             logger.warning(f"Unknown action type: {action_type}")
             return None
-    
-    def process_rules(self, context: Dict, rule_types: Optional[List[str]] = None) -> List[Dict]:
+
+    def process_rules(
+        self, context: Dict, rule_types: Optional[List[str]] = None
+    ) -> List[Dict]:
         """Process all applicable rules against the context"""
         results = []
-        
+
         for rule in self.rules:
-            if rule_types and rule.get('rule_type') not in rule_types:
+            if rule_types and rule.get("rule_type") not in rule_types:
                 continue
-            
-            if self.evaluate_conditions(rule['conditions'], context):
-                action_results = self.execute_actions(rule['actions'], context)
-                results.append({
-                    'rule_name': rule.get('name'),
-                    'rule_type': rule.get('rule_type'),
-                    'triggered': True,
-                    'actions': action_results
-                })
-        
+
+            if self.evaluate_conditions(rule["conditions"], context):
+                action_results = self.execute_actions(rule["actions"], context)
+                results.append(
+                    {
+                        "rule_name": rule.get("name"),
+                        "rule_type": rule.get("rule_type"),
+                        "triggered": True,
+                        "actions": action_results,
+                    }
+                )
+
         return results
-    
+
     # Default action handlers
     def _send_notification(self, params: Dict, context: Dict) -> Dict:
         """Send notification action"""
-        notification_type = params.get('type', 'email')
-        recipient = params.get('recipient')
-        message = params.get('message', '')
-        
+        notification_type = params.get("type", "email")
+        recipient = params.get("recipient")
+        message = params.get("message", "")
+
         # In a real implementation, this would integrate with email/Slack/etc.
-        logger.info(f"Sending {notification_type} notification to {recipient}: {message}")
-        
+        logger.info(
+            f"Sending {notification_type} notification to {recipient}: {message}"
+        )
+
         return {
-            'notification_sent': True,
-            'type': notification_type,
-            'recipient': recipient,
-            'message': message
+            "notification_sent": True,
+            "type": notification_type,
+            "recipient": recipient,
+            "message": message,
         }
-    
+
     def _update_status(self, params: Dict, context: Dict) -> Dict:
         """Update status action"""
-        entity_type = params.get('entity_type')
-        entity_id = params.get('entity_id')
-        new_status = params.get('status')
-        
+        entity_type = params.get("entity_type")
+        entity_id = params.get("entity_id")
+        new_status = params.get("status")
+
         logger.info(f"Updating {entity_type} {entity_id} status to {new_status}")
-        
+
         return {
-            'status_updated': True,
-            'entity_type': entity_type,
-            'entity_id': entity_id,
-            'new_status': new_status
+            "status_updated": True,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "new_status": new_status,
         }
-    
+
     def _require_approval(self, params: Dict, context: Dict) -> Dict:
         """Require approval action"""
-        approver_role = params.get('approver_role', 'admin')
-        entity_type = params.get('entity_type')
-        entity_id = params.get('entity_id')
-        
+        approver_role = params.get("approver_role", "admin")
+        entity_type = params.get("entity_type")
+        entity_id = params.get("entity_id")
+
         logger.info(f"Requiring {approver_role} approval for {entity_type} {entity_id}")
-        
+
         return {
-            'approval_required': True,
-            'approver_role': approver_role,
-            'entity_type': entity_type,
-            'entity_id': entity_id
+            "approval_required": True,
+            "approver_role": approver_role,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
         }
-    
+
     def _assign_user(self, params: Dict, context: Dict) -> Dict:
         """Assign user action"""
-        user_id = params.get('user_id')
-        role = params.get('role')
-        entity_type = params.get('entity_type')
-        entity_id = params.get('entity_id')
-        
-        logger.info(f"Assigning user {user_id} with role {role} to {entity_type} {entity_id}")
-        
+        user_id = params.get("user_id")
+        role = params.get("role")
+        entity_type = params.get("entity_type")
+        entity_id = params.get("entity_id")
+
+        logger.info(
+            f"Assigning user {user_id} with role {role} to {entity_type} {entity_id}"
+        )
+
         return {
-            'user_assigned': True,
-            'user_id': user_id,
-            'role': role,
-            'entity_type': entity_type,
-            'entity_id': entity_id
+            "user_assigned": True,
+            "user_id": user_id,
+            "role": role,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
         }
-    
+
     def _create_task(self, params: Dict, context: Dict) -> Dict:
         """Create task action"""
-        title = params.get('title')
-        description = params.get('description', '')
-        assignee = params.get('assignee')
-        due_date = params.get('due_date')
-        
+        title = params.get("title")
+        description = params.get("description", "")
+        assignee = params.get("assignee")
+        due_date = params.get("due_date")
+
         logger.info(f"Creating task: {title} for {assignee}")
-        
+
         return {
-            'task_created': True,
-            'title': title,
-            'description': description,
-            'assignee': assignee,
-            'due_date': due_date
+            "task_created": True,
+            "title": title,
+            "description": description,
+            "assignee": assignee,
+            "due_date": due_date,
         }
-    
+
     def _update_project(self, params: Dict, context: Dict) -> Dict:
         """Update project action"""
-        project_id = params.get('project_id')
-        updates = params.get('updates', {})
-        
+        project_id = params.get("project_id")
+        updates = params.get("updates", {})
+
         logger.info(f"Updating project {project_id} with {updates}")
-        
-        return {
-            'project_updated': True,
-            'project_id': project_id,
-            'updates': updates
-        }
-    
+
+        return {"project_updated": True, "project_id": project_id, "updates": updates}
+
     def _log_event(self, params: Dict, context: Dict) -> Dict:
         """Log event action"""
-        event_type = params.get('event_type')
-        message = params.get('message', '')
-        level = params.get('level', 'info')
-        
+        event_type = params.get("event_type")
+        message = params.get("message", "")
+        level = params.get("level", "info")
+
         logger.info(f"Logging event: {event_type} - {message}")
-        
+
         return {
-            'event_logged': True,
-            'event_type': event_type,
-            'message': message,
-            'level': level
+            "event_logged": True,
+            "event_type": event_type,
+            "message": message,
+            "level": level,
         }
-    
+
     def _trigger_workflow(self, params: Dict, context: Dict) -> Dict:
         """Trigger workflow action"""
-        workflow_name = params.get('workflow_name')
-        workflow_params = params.get('workflow_params', {})
-        
+        workflow_name = params.get("workflow_name")
+        workflow_params = params.get("workflow_params", {})
+
         logger.info(f"Triggering workflow: {workflow_name}")
-        
+
         return {
-            'workflow_triggered': True,
-            'workflow_name': workflow_name,
-            'workflow_params': workflow_params
+            "workflow_triggered": True,
+            "workflow_name": workflow_name,
+            "workflow_params": workflow_params,
         }
-    
+
     def get_default_rules(self) -> List[Dict]:
         """Get default rules for Shadow Goose"""
         return [
@@ -319,13 +321,13 @@ class RulesEngine:
                     {
                         "field": "project_amount",
                         "operator": ConditionOperator.GREATER_THAN.value,
-                        "value": 10000
+                        "value": 10000,
                     },
                     {
                         "field": "user_role",
                         "operator": ConditionOperator.NOT_EQUALS.value,
-                        "value": "admin"
-                    }
+                        "value": "admin",
+                    },
                 ],
                 "actions": [
                     {
@@ -333,18 +335,18 @@ class RulesEngine:
                         "params": {
                             "approver_role": "admin",
                             "entity_type": "project",
-                            "entity_id": "{project_id}"
-                        }
+                            "entity_id": "{project_id}",
+                        },
                     },
                     {
                         "type": ActionType.SEND_NOTIFICATION.value,
                         "params": {
                             "type": "email",
                             "recipient": "admin@shadow-goose.com",
-                            "message": "High value project requires approval"
-                        }
-                    }
-                ]
+                            "message": "High value project requires approval",
+                        },
+                    },
+                ],
             },
             {
                 "name": "Grant Deadline Alert",
@@ -354,13 +356,13 @@ class RulesEngine:
                     {
                         "field": "grant_deadline",
                         "operator": ConditionOperator.LESS_EQUAL.value,
-                        "value": "{datetime.now() + timedelta(days=7)}"
+                        "value": "{datetime.now() + timedelta(days=7)}",
                     },
                     {
                         "field": "grant_status",
                         "operator": ConditionOperator.EQUALS.value,
-                        "value": "active"
-                    }
+                        "value": "active",
+                    },
                 ],
                 "actions": [
                     {
@@ -368,10 +370,10 @@ class RulesEngine:
                         "params": {
                             "type": "slack",
                             "recipient": "#grants",
-                            "message": "Grant {grant_name} closes in 7 days"
-                        }
+                            "message": "Grant {grant_name} closes in 7 days",
+                        },
                     }
-                ]
+                ],
             },
             {
                 "name": "New User Assignment",
@@ -381,13 +383,13 @@ class RulesEngine:
                     {
                         "field": "user_role",
                         "operator": ConditionOperator.EQUALS.value,
-                        "value": "user"
+                        "value": "user",
                     },
                     {
                         "field": "user_projects",
                         "operator": ConditionOperator.EQUALS.value,
-                        "value": 0
-                    }
+                        "value": 0,
+                    },
                 ],
                 "actions": [
                     {
@@ -396,10 +398,10 @@ class RulesEngine:
                             "user_id": "{user_id}",
                             "role": "member",
                             "entity_type": "project",
-                            "entity_id": "default"
-                        }
+                            "entity_id": "default",
+                        },
                     }
-                ]
+                ],
             },
             {
                 "name": "Production Deployment Approval",
@@ -409,13 +411,13 @@ class RulesEngine:
                     {
                         "field": "deployment_environment",
                         "operator": ConditionOperator.EQUALS.value,
-                        "value": "production"
+                        "value": "production",
                     },
                     {
                         "field": "user_role",
                         "operator": ConditionOperator.NOT_EQUALS.value,
-                        "value": "admin"
-                    }
+                        "value": "admin",
+                    },
                 ],
                 "actions": [
                     {
@@ -423,26 +425,26 @@ class RulesEngine:
                         "params": {
                             "approver_role": "admin",
                             "entity_type": "deployment",
-                            "entity_id": "{deployment_id}"
-                        }
+                            "entity_id": "{deployment_id}",
+                        },
                     },
                     {
                         "type": ActionType.SEND_NOTIFICATION.value,
                         "params": {
                             "type": "slack",
                             "recipient": "#deployments",
-                            "message": "Production deployment requires admin approval"
-                        }
+                            "message": "Production deployment requires admin approval",
+                        },
                     },
                     {
                         "type": ActionType.LOG_EVENT.value,
                         "params": {
                             "event_type": "deployment_approval_required",
                             "message": "Production deployment pending approval",
-                            "level": "warning"
-                        }
-                    }
-                ]
+                            "level": "warning",
+                        },
+                    },
+                ],
             },
             {
                 "name": "Staging Auto-Deploy",
@@ -452,18 +454,18 @@ class RulesEngine:
                     {
                         "field": "branch_name",
                         "operator": ConditionOperator.EQUALS.value,
-                        "value": "main"
+                        "value": "main",
                     },
                     {
                         "field": "deployment_environment",
                         "operator": ConditionOperator.EQUALS.value,
-                        "value": "staging"
+                        "value": "staging",
                     },
                     {
                         "field": "commit_message",
                         "operator": ConditionOperator.CONTAINS.value,
-                        "value": "feat:"
-                    }
+                        "value": "feat:",
+                    },
                 ],
                 "actions": [
                     {
@@ -472,19 +474,19 @@ class RulesEngine:
                             "workflow_name": "staging_deploy",
                             "workflow_params": {
                                 "environment": "staging",
-                                "auto_deploy": True
-                            }
-                        }
+                                "auto_deploy": True,
+                            },
+                        },
                     },
                     {
                         "type": ActionType.SEND_NOTIFICATION.value,
                         "params": {
                             "type": "slack",
                             "recipient": "#deployments",
-                            "message": "Auto-deploying to staging: {commit_message}"
-                        }
-                    }
-                ]
+                            "message": "Auto-deploying to staging: {commit_message}",
+                        },
+                    },
+                ],
             },
             {
                 "name": "Critical Bug Hotfix",
@@ -494,13 +496,13 @@ class RulesEngine:
                     {
                         "field": "commit_message",
                         "operator": ConditionOperator.CONTAINS.value,
-                        "value": "hotfix:"
+                        "value": "hotfix:",
                     },
                     {
                         "field": "priority",
                         "operator": ConditionOperator.EQUALS.value,
-                        "value": "critical"
-                    }
+                        "value": "critical",
+                    },
                 ],
                 "actions": [
                     {
@@ -510,27 +512,27 @@ class RulesEngine:
                             "workflow_params": {
                                 "environment": "production",
                                 "skip_tests": True,
-                                "emergency": True
-                            }
-                        }
+                                "emergency": True,
+                            },
+                        },
                     },
                     {
                         "type": ActionType.SEND_NOTIFICATION.value,
                         "params": {
                             "type": "slack",
                             "recipient": "#alerts",
-                            "message": "🚨 CRITICAL: Emergency deployment for hotfix"
-                        }
+                            "message": "🚨 CRITICAL: Emergency deployment for hotfix",
+                        },
                     },
                     {
                         "type": ActionType.LOG_EVENT.value,
                         "params": {
                             "event_type": "emergency_deployment",
                             "message": "Critical hotfix deployment initiated",
-                            "level": "critical"
-                        }
-                    }
-                ]
+                            "level": "critical",
+                        },
+                    },
+                ],
             },
             {
                 "name": "Deployment Health Check",
@@ -540,13 +542,13 @@ class RulesEngine:
                     {
                         "field": "deployment_status",
                         "operator": ConditionOperator.EQUALS.value,
-                        "value": "failed"
+                        "value": "failed",
                     },
                     {
                         "field": "deployment_environment",
                         "operator": ConditionOperator.EQUALS.value,
-                        "value": "production"
-                    }
+                        "value": "production",
+                    },
                 ],
                 "actions": [
                     {
@@ -555,27 +557,27 @@ class RulesEngine:
                             "workflow_name": "rollback_deployment",
                             "workflow_params": {
                                 "environment": "production",
-                                "reason": "health_check_failed"
-                            }
-                        }
+                                "reason": "health_check_failed",
+                            },
+                        },
                     },
                     {
                         "type": ActionType.SEND_NOTIFICATION.value,
                         "params": {
                             "type": "slack",
                             "recipient": "#alerts",
-                            "message": "🚨 DEPLOYMENT FAILED: Initiating rollback"
-                        }
+                            "message": "🚨 DEPLOYMENT FAILED: Initiating rollback",
+                        },
                     },
                     {
                         "type": ActionType.LOG_EVENT.value,
                         "params": {
                             "event_type": "deployment_rollback",
                             "message": "Production deployment failed, rolling back",
-                            "level": "error"
-                        }
-                    }
-                ]
+                            "level": "error",
+                        },
+                    },
+                ],
             },
             {
                 "name": "Code Review Required",
@@ -585,13 +587,13 @@ class RulesEngine:
                     {
                         "field": "user_role",
                         "operator": ConditionOperator.NOT_EQUALS.value,
-                        "value": "admin"
+                        "value": "admin",
                     },
                     {
                         "field": "branch_name",
                         "operator": ConditionOperator.EQUALS.value,
-                        "value": "main"
-                    }
+                        "value": "main",
+                    },
                 ],
                 "actions": [
                     {
@@ -599,18 +601,18 @@ class RulesEngine:
                         "params": {
                             "approver_role": "admin",
                             "entity_type": "pull_request",
-                            "entity_id": "{pr_id}"
-                        }
+                            "entity_id": "{pr_id}",
+                        },
                     },
                     {
                         "type": ActionType.SEND_NOTIFICATION.value,
                         "params": {
                             "type": "slack",
                             "recipient": "#code-review",
-                            "message": "Code review required for main branch commit"
-                        }
-                    }
-                ]
+                            "message": "Code review required for main branch commit",
+                        },
+                    },
+                ],
             },
             {
                 "name": "Security Scan on Deploy",
@@ -620,13 +622,13 @@ class RulesEngine:
                     {
                         "field": "deployment_environment",
                         "operator": ConditionOperator.EQUALS.value,
-                        "value": "production"
+                        "value": "production",
                     },
                     {
                         "field": "security_scan_status",
                         "operator": ConditionOperator.NOT_EQUALS.value,
-                        "value": "passed"
-                    }
+                        "value": "passed",
+                    },
                 ],
                 "actions": [
                     {
@@ -635,26 +637,449 @@ class RulesEngine:
                             "workflow_name": "security_scan",
                             "workflow_params": {
                                 "scan_type": "full",
-                                "block_deploy": True
-                            }
-                        }
+                                "block_deploy": True,
+                            },
+                        },
                     },
                     {
                         "type": ActionType.SEND_NOTIFICATION.value,
                         "params": {
                             "type": "slack",
                             "recipient": "#security",
-                            "message": "Security scan required before production deploy"
-                        }
+                            "message": "Security scan required before production deploy",
+                        },
+                    },
+                ],
+            },
+            {
+                "name": "Investigation Methodology - Start with Obvious",
+                "rule_type": "workflow",
+                "description": "When investigating issues, always start with the most common failure points",
+                "conditions": [
+                    {
+                        "field": "issue_type",
+                        "operator": "in",
+                        "value": ["error", "failure", "bug"],
                     }
-                ]
-            }
+                ],
+                "actions": [
+                    {
+                        "type": "send_notification",
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#dev-alerts",
+                            "message": "🔍 Investigation started - checking syntax → imports → dependencies → logic",
+                        },
+                    },
+                    {
+                        "type": "create_task",
+                        "params": {
+                            "title": "Investigation: Start with Obvious",
+                            "description": "1. Check syntax errors\n2. Validate imports\n3. Test dependencies\n4. Verify basic functionality",
+                            "priority": "high",
+                        },
+                    },
+                ],
+            },
+            {
+                "name": "Investigation Methodology - Work Backwards",
+                "rule_type": "workflow",
+                "description": "Trace dependency chain backwards from failure point",
+                "conditions": [
+                    {
+                        "field": "investigation_phase",
+                        "operator": "equals",
+                        "value": "dependency_trace",
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "send_notification",
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#dev-alerts",
+                            "message": "🔍 Tracing dependency chain: Frontend → API → Database → Environment",
+                        },
+                    }
+                ],
+            },
+            {
+                "name": "Quality Assurance - Import Validation",
+                "rule_type": "prevention",
+                "description": "Always test imports before using new modules",
+                "conditions": [
+                    {
+                        "field": "change_type",
+                        "operator": "equals",
+                        "value": "new_import",
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "require_approval",
+                        "params": {
+                            "approver_role": "admin",
+                            "entity_type": "code_change",
+                            "message": "Import validation required before deployment",
+                        },
+                    }
+                ],
+            },
+            {
+                "name": "Quality Assurance - Syntax Pre-check",
+                "rule_type": "prevention",
+                "description": "Run compilation tests before deployment",
+                "conditions": [
+                    {
+                        "field": "deployment_stage",
+                        "operator": "equals",
+                        "value": "pre_deploy",
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "create_task",
+                        "params": {
+                            "title": "Syntax Pre-check Required",
+                            "description": "Run: python -m py_compile app/main.py && python -m py_compile app/grants.py",
+                            "priority": "critical",
+                        },
+                    }
+                ],
+            },
+            {
+                "name": "Quality Assurance - No Magic Numbers",
+                "rule_type": "code_quality",
+                "description": "Use constants instead of magic numbers",
+                "conditions": [
+                    {
+                        "field": "code_review",
+                        "operator": "contains",
+                        "value": "magic_number",
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "send_notification",
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#code-review",
+                            "message": "⚠️ Magic number detected - please use constants instead",
+                        },
+                    },
+                    {
+                        "type": "require_approval",
+                        "params": {
+                            "approver_role": "admin",
+                            "entity_type": "code_change",
+                            "message": "Magic numbers must be replaced with constants",
+                        },
+                    },
+                ],
+            },
+            {
+                "name": "Quality Assurance - Function Length",
+                "rule_type": "code_quality",
+                "description": "Keep functions under 50 lines when possible",
+                "conditions": [
+                    {
+                        "field": "function_length",
+                        "operator": "greater_than",
+                        "value": 50,
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "send_notification",
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#code-review",
+                            "message": "⚠️ Function exceeds 50 lines - consider refactoring",
+                        },
+                    }
+                ],
+            },
+            {
+                "name": "Quality Assurance - Graceful Degradation",
+                "rule_type": "prevention",
+                "description": "Systems should work even if some components fail",
+                "conditions": [
+                    {
+                        "field": "component_status",
+                        "operator": "equals",
+                        "value": "failed",
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "send_notification",
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#system-alerts",
+                            "message": "🔄 Component failed - activating graceful degradation",
+                        },
+                    },
+                    {
+                        "type": "update_status",
+                        "params": {
+                            "entity_type": "system",
+                            "status": "degraded_performance",
+                        },
+                    },
+                ],
+            },
+            {
+                "name": "Advanced QA - Blue-Green Deployment",
+                "rule_type": "deployment",
+                "description": "Ensure blue-green deployment strategy with rollback capability",
+                "conditions": [
+                    {
+                        "field": "deployment_type",
+                        "operator": "equals",
+                        "value": "production",
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "require_approval",
+                        "params": {
+                            "approver_role": "admin",
+                            "entity_type": "deployment",
+                            "message": "Blue-green deployment strategy required for production",
+                        },
+                    },
+                    {
+                        "type": "create_task",
+                        "params": {
+                            "title": "Deployment Rollback Plan",
+                            "description": "1. Verify backup strategy\n2. Test rollback procedure\n3. Monitor deployment health\n4. Prepare rollback triggers",
+                            "priority": "critical",
+                        },
+                    },
+                ],
+            },
+            {
+                "name": "Advanced QA - Health Check Monitoring",
+                "rule_type": "monitoring",
+                "description": "Implement comprehensive health monitoring for all endpoints",
+                "conditions": [
+                    {
+                        "field": "endpoint_type",
+                        "operator": "in",
+                        "value": ["api", "web", "database"],
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "create_task",
+                        "params": {
+                            "title": "Health Check Implementation",
+                            "description": "1. Add /health endpoint\n2. Implement dependency checks\n3. Set up monitoring alerts\n4. Configure response time tracking",
+                            "priority": "high",
+                        },
+                    }
+                ],
+            },
+            {
+                "name": "Advanced QA - Data Integrity Validation",
+                "rule_type": "data_quality",
+                "description": "Validate data at API boundaries with strong typing",
+                "conditions": [
+                    {
+                        "field": "data_operation",
+                        "operator": "in",
+                        "value": ["create", "update", "delete"],
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "send_notification",
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#data-quality",
+                            "message": "🔍 Data validation required - ensure input sanitization and type safety",
+                        },
+                    }
+                ],
+            },
+            {
+                "name": "Advanced QA - Currency & Localization",
+                "rule_type": "data_quality",
+                "description": "Ensure proper currency formatting and localization",
+                "conditions": [
+                    {"field": "data_type", "operator": "equals", "value": "currency"}
+                ],
+                "actions": [
+                    {
+                        "type": "validate_data",
+                        "params": {
+                            "validation_type": "currency_format",
+                            "currency": "AUD",
+                            "locale": "en-AU",
+                        },
+                    }
+                ],
+            },
+            {
+                "name": "Advanced QA - Performance Optimization",
+                "rule_type": "performance",
+                "description": "Monitor and optimize database queries and caching",
+                "conditions": [
+                    {
+                        "field": "query_execution_time",
+                        "operator": "greater_than",
+                        "value": 1000,  # 1 second
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "send_notification",
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#performance",
+                            "message": "⚠️ Slow query detected - optimization required",
+                        },
+                    },
+                    {
+                        "type": "create_task",
+                        "params": {
+                            "title": "Query Optimization",
+                            "description": "1. Analyze slow query\n2. Add database indexes\n3. Implement caching\n4. Monitor performance",
+                            "priority": "medium",
+                        },
+                    },
+                ],
+            },
+            {
+                "name": "Advanced QA - Security Best Practices",
+                "rule_type": "security",
+                "description": "Implement comprehensive security measures",
+                "conditions": [
+                    {
+                        "field": "security_scan",
+                        "operator": "equals",
+                        "value": "required",
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "require_approval",
+                        "params": {
+                            "approver_role": "security_admin",
+                            "entity_type": "deployment",
+                            "message": "Security scan required before deployment",
+                        },
+                    }
+                ],
+            },
+            {
+                "name": "Advanced QA - Structured Logging",
+                "rule_type": "monitoring",
+                "description": "Ensure structured logging with proper context",
+                "conditions": [
+                    {
+                        "field": "log_level",
+                        "operator": "in",
+                        "value": ["error", "warning"],
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "log_event",
+                        "params": {
+                            "level": "info",
+                            "message": "Structured logging event",
+                            "context": {
+                                "timestamp": "{{timestamp}}",
+                                "user_id": "{{user_id}}",
+                                "action": "{{action}}",
+                                "duration": "{{duration}}",
+                            },
+                        },
+                    }
+                ],
+            },
+            {
+                "name": "Advanced QA - User Experience Standards",
+                "rule_type": "ux",
+                "description": "Ensure professional presentation and accessibility",
+                "conditions": [
+                    {
+                        "field": "ui_component",
+                        "operator": "equals",
+                        "value": "new_feature",
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "create_task",
+                        "params": {
+                            "title": "UX Review Required",
+                            "description": "1. Check responsive design\n2. Verify accessibility\
+                                (WCAG)\n3. Test loading states\n4. Review error messages\n5. Validate branding consistency",
+                            "priority": "medium",
+                        },
+                    }
+                ],
+            },
+            {
+                "name": "Advanced QA - Continuous Improvement",
+                "rule_type": "process",
+                "description": "Implement iterative development with quality gates",
+                "conditions": [
+                    {
+                        "field": "change_size",
+                        "operator": "greater_than",
+                        "value": "small",
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "require_approval",
+                        "params": {
+                            "approver_role": "tech_lead",
+                            "entity_type": "code_change",
+                            "message": "Code review and testing required for large changes",
+                        },
+                    }
+                ],
+            },
+            {
+                "name": "Advanced QA - Success Metrics Monitoring",
+                "rule_type": "monitoring",
+                "description": "Monitor key success indicators and red flags",
+                "conditions": [
+                    {
+                        "field": "error_rate",
+                        "operator": "greater_than",
+                        "value": 0.01,  # 1%
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "send_notification",
+                        "params": {
+                            "type": "slack",
+                            "recipient": "#alerts",
+                            "message": "🚨 Error rate exceeds 1% - immediate investigation required",
+                        },
+                    },
+                    {
+                        "type": "create_task",
+                        "params": {
+                            "title": "Error Rate Investigation",
+                            "description": "1. Analyze error patterns\n2. Check recent deployments\n3. Review monitoring data\n4. Implement fixes",
+                            "priority": "critical",
+                        },
+                    },
+                ],
+            },
         ]
-    
+
     def load_rules_from_file(self, file_path: str) -> bool:
         """Load rules from JSON file"""
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, "r") as f:
                 rules_data = json.load(f)
                 for rule in rules_data:
                     self.add_rule(rule)
@@ -662,20 +1087,21 @@ class RulesEngine:
         except Exception as e:
             logger.error(f"Failed to load rules from file: {e}")
             return False
-    
+
     def save_rules_to_file(self, file_path: str) -> bool:
         """Save current rules to JSON file"""
         try:
-            with open(file_path, 'w') as f:
+            with open(file_path, "w") as f:
                 json.dump(self.rules, f, indent=2)
             return True
         except Exception as e:
             logger.error(f"Failed to save rules to file: {e}")
             return False
 
+
 # Global rules engine instance
 rules_engine = RulesEngine()
 
 # Initialize with default rules
 for rule in rules_engine.get_default_rules():
-    rules_engine.add_rule(rule) 
+    rules_engine.add_rule(rule)

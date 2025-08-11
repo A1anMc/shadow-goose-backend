@@ -20,23 +20,27 @@ TEST_USER = {
     "username": "test",
     "password": "test",
     "email": "test@shadow-goose.com",
-    "role": "admin"
+    "role": "admin",
 }
+
 
 # Pydantic models
 class LoginRequest(BaseModel):
     username: str
     password: str
 
+
 class UserInfo(BaseModel):
     username: str
     email: str
     role: str
 
+
 class ProjectCreate(BaseModel):
     name: str
     description: str = ""
     status: str = "draft"
+
 
 class ProjectResponse(BaseModel):
     id: int
@@ -46,6 +50,7 @@ class ProjectResponse(BaseModel):
     created_by: int
     created_at: datetime
     updated_at: datetime
+
 
 # Security
 security = HTTPBearer()
@@ -66,10 +71,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Create database tables on startup
 @app.on_event("startup")
 async def startup_event():
     create_tables()
+
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -78,9 +85,12 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM]
+        )
         username: str = payload.get("sub")
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -90,19 +100,25 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     except jwt.JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-def get_current_user(username: str = Depends(verify_token), db: Session = Depends(get_db)):
+
+def get_current_user(
+    username: str = Depends(verify_token), db: Session = Depends(get_db)
+):
     user = db.query(User).filter(User.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
+
 @app.get("/")
 def root():
     return {"message": "Shadow Goose API v2.0.0", "status": "running"}
 
+
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "2.0.0"}
+
 
 @app.get("/debug")
 def debug():
@@ -110,28 +126,32 @@ def debug():
         "version": "2.0.0",
         "database_url": os.getenv("DATABASE_URL", "not_set"),
         "secret_key": "set" if os.getenv("SECRET_KEY") else "not_set",
-        "features": ["database_integration", "project_management", "user_management"]
+        "features": ["database_integration", "project_management", "user_management"],
     }
+
 
 @app.post("/auth/login")
 def login(login_data: LoginRequest, db: Session = Depends(get_db)):
     # Check if user exists in database
     user = db.query(User).filter(User.username == login_data.username).first()
-    
+
     if not user:
         # Create test user if it doesn't exist
-        if login_data.username == TEST_USER["username"] and login_data.password == TEST_USER["password"]:
+        if (
+            login_data.username == TEST_USER["username"]
+            and login_data.password == TEST_USER["password"]
+        ):
             user = User(
                 username=TEST_USER["username"],
                 email=TEST_USER["email"],
-                role=TEST_USER["role"]
+                role=TEST_USER["role"],
             )
             db.add(user)
             db.commit()
             db.refresh(user)
         else:
             raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+
     access_token = create_access_token(data={"sub": user.username})
     return {
         "access_token": access_token,
@@ -140,24 +160,27 @@ def login(login_data: LoginRequest, db: Session = Depends(get_db)):
             "id": user.id,
             "username": user.username,
             "email": user.email,
-            "role": user.role
-        }
+            "role": user.role,
+        },
     }
+
 
 @app.get("/auth/user")
 def get_user_info(current_user: User = Depends(get_current_user)):
     return UserInfo(
-        username=current_user.username,
-        email=current_user.email,
-        role=current_user.role
+        username=current_user.username, email=current_user.email, role=current_user.role
     )
+
 
 @app.post("/auth/logout")
 def logout():
     return {"message": "Logged out successfully"}
 
+
 @app.get("/api/projects")
-def get_projects(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_projects(
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
     projects = db.query(Project).filter(Project.created_by == current_user.id).all()
     return {
         "projects": [
@@ -167,24 +190,29 @@ def get_projects(current_user: User = Depends(get_current_user), db: Session = D
                 "description": project.description,
                 "status": project.status,
                 "created_at": project.created_at,
-                "updated_at": project.updated_at
+                "updated_at": project.updated_at,
             }
             for project in projects
         ]
     }
 
+
 @app.post("/api/projects")
-def create_project(project_data: ProjectCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_project(
+    project_data: ProjectCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     project = Project(
         name=project_data.name,
         description=project_data.description,
         status=project_data.status,
-        created_by=current_user.id
+        created_by=current_user.id,
     )
     db.add(project)
     db.commit()
     db.refresh(project)
-    
+
     return {
         "id": project.id,
         "name": project.name,
@@ -192,15 +220,24 @@ def create_project(project_data: ProjectCreate, current_user: User = Depends(get
         "status": project.status,
         "created_by": project.created_by,
         "created_at": project.created_at,
-        "updated_at": project.updated_at
+        "updated_at": project.updated_at,
     }
+
 
 @app.get("/api/projects/{project_id}")
-def get_project(project_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    project = db.query(Project).filter(Project.id == project_id, Project.created_by == current_user.id).first()
+def get_project(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.created_by == current_user.id)
+        .first()
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     return {
         "id": project.id,
         "name": project.name,
@@ -208,23 +245,33 @@ def get_project(project_id: int, current_user: User = Depends(get_current_user),
         "status": project.status,
         "created_by": project.created_by,
         "created_at": project.created_at,
-        "updated_at": project.updated_at
+        "updated_at": project.updated_at,
     }
 
+
 @app.put("/api/projects/{project_id}")
-def update_project(project_id: int, project_data: ProjectCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    project = db.query(Project).filter(Project.id == project_id, Project.created_by == current_user.id).first()
+def update_project(
+    project_id: int,
+    project_data: ProjectCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.created_by == current_user.id)
+        .first()
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     project.name = project_data.name
     project.description = project_data.description
     project.status = project_data.status
     project.updated_at = datetime.utcnow()
-    
+
     db.commit()
     db.refresh(project)
-    
+
     return {
         "id": project.id,
         "name": project.name,
@@ -232,16 +279,25 @@ def update_project(project_id: int, project_data: ProjectCreate, current_user: U
         "status": project.status,
         "created_by": project.created_by,
         "created_at": project.created_at,
-        "updated_at": project.updated_at
+        "updated_at": project.updated_at,
     }
 
+
 @app.delete("/api/projects/{project_id}")
-def delete_project(project_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    project = db.query(Project).filter(Project.id == project_id, Project.created_by == current_user.id).first()
+def delete_project(
+    project_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.created_by == current_user.id)
+        .first()
+    )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     db.delete(project)
     db.commit()
-    
+
     return {"message": "Project deleted successfully"}
