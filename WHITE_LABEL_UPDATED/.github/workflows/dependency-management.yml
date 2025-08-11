@@ -1,0 +1,194 @@
+name: Dependency Management
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 9 AM
+  push:
+    paths:
+      - '**/requirements.txt'
+      - '**/package.json'
+  pull_request:
+    paths:
+      - '**/requirements.txt'
+      - '**/package.json'
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  check-dependencies:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety pipdeptree pip-review
+
+    - name: Check for dependency conflicts
+      run: |
+        echo "🔍 Checking for dependency conflicts..."
+        pip check || {
+          echo "❌ Dependency conflicts detected!"
+          exit 1
+        }
+
+    - name: Security vulnerability check
+      run: |
+        echo "🔒 Checking for security vulnerabilities..."
+        safety check --json > security-report.json || {
+          echo "⚠️  Security vulnerabilities found - check security-report.json"
+          cat security-report.json
+        }
+
+    - name: Generate dependency tree
+      run: |
+        echo "📋 Generating dependency tree..."
+        pipdeptree --json > dependency-tree.json
+        pipdeptree > dependency-tree.txt
+
+    - name: Check for outdated packages
+      run: |
+        echo "📦 Checking for outdated packages..."
+        pip list --outdated > outdated-packages.txt || {
+          echo "No outdated packages found" > outdated-packages.txt
+        }
+
+    - name: Upload dependency reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: dependency-reports-${{ github.run_number }}
+        path: |
+          security-report.json
+          dependency-tree.json
+          dependency-tree.txt
+          outdated-packages.txt
+        retention-days: 30
+
+    - name: Comment on PR with findings
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+
+          let comment = '## 🔍 Dependency Analysis Results\n\n';
+
+          // Check for security issues
+          try {
+            const securityReport = JSON.parse(fs.readFileSync('security-report.json', 'utf8'));
+            if (securityReport.length > 0) {
+              comment += '⚠️ **Security Vulnerabilities Found:**\n';
+              securityReport.forEach(vuln => {
+                comment += `- ${vuln.package}: ${vuln.vulnerability_id} (${vuln.severity})\n`;
+              });
+              comment += '\n';
+            } else {
+              comment += '✅ **No security vulnerabilities found**\n\n';
+            }
+          } catch (e) {
+            comment += '✅ **No security vulnerabilities found**\n\n';
+          }
+
+          // Check for outdated packages
+          try {
+            const outdated = fs.readFileSync('outdated-packages.txt', 'utf8');
+            if (outdated.trim() !== 'No outdated packages found') {
+              comment += '📦 **Outdated Packages:**\n';
+              comment += '```\n' + outdated + '\n```\n\n';
+            } else {
+              comment += '✅ **All packages are up to date**\n\n';
+            }
+          } catch (e) {
+            comment += '✅ **All packages are up to date**\n\n';
+          }
+
+          comment += '📋 **Reports:**\n';
+          comment += '- Dependency tree: `dependency-tree.txt`\n';
+          comment += '- Security report: `security-report.json`\n';
+          comment += '- Outdated packages: `outdated-packages.txt`\n\n';
+
+          comment += '💡 **Recommendations:**\n';
+          comment += '1. Review security vulnerabilities\n';
+          comment += '2. Update outdated packages if safe\n';
+          comment += '3. Test thoroughly after updates\n';
+
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+  update-dependencies:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    strategy:
+      matrix:
+        python-version: ['3.11']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install pip-review
+      run: |
+        python -m pip install --upgrade pip
+        pip install pip-review safety
+
+    - name: Update dependencies
+      run: |
+        echo "📦 Updating dependencies..."
+        pip-review --local --auto || {
+          echo "⚠️  Some dependencies could not be updated automatically"
+        }
+
+    - name: Run tests
+      run: |
+        echo "🧪 Running tests..."
+        pip install pytest
+        pytest || {
+          echo "❌ Tests failed after dependency update"
+          exit 1
+        }
+
+    - name: Security check after update
+      run: |
+        echo "🔒 Security check after update..."
+        safety check || {
+          echo "⚠️  Security issues found after update"
+        }
+
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add requirements.txt
+        git diff --quiet && git diff --staged --quiet || {
+          git commit -m "chore: auto-update dependencies [skip ci]"
+          git push
+        }

@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: navimpact-api
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://navimpact-web.onrender.com
+      - key: SENTRY_DSN
+        sync: false
+      - key: REDIS_URL
+        sync: false
+    healthCheckPath: /health
+
+  - type: web
+    name: navimpact-web
+    env: node
+    plan: starter
+    buildCommand: cd frontend && npm ci --only=production && npm run build
+    startCommand: cd frontend/.next/standalone && PORT=$PORT node server.js
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://navimpact-api.onrender.com
+      - key: NEXT_PUBLIC_CLIENT
+        value: navimpact
+      - key: NEXT_PUBLIC_APP_NAME
+        value: NavImpact
+      - key: NEXT_PUBLIC_APP_VERSION
+        value: 1.0.0
+      - key: NEXT_PUBLIC_ENV
+        value: production
+    healthCheckPath: /api/health

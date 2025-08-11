@@ -1,0 +1,51 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-case-conflict
+
+  - repo: https://github.com/psf/black
+    rev: 23.3.0
+    hooks:
+      - id: black
+        language_version: python3
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+        args: [--max-line-length=100, --extend-ignore=E203,W503]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.3.0
+    hooks:
+      - id: mypy
+        args: [--ignore-missing-imports]
+
+  - repo: local
+    hooks:
+      - id: dependency-check
+        name: Check Python Dependencies
+        entry: bash WHITE_LABEL_UPDATED/scripts/check-dependencies.sh
+        language: system
+        pass_filenames: false
+        files: requirements\.txt$
+
+      - id: typescript-check
+        name: Check TypeScript
+        entry: node WHITE_LABEL_UPDATED/scripts/auto-fix-typescript.js
+        language: system
+        pass_filenames: false
+        files: \.(ts|tsx)$
+
+      - id: security-check
+        name: Security Check
+        entry: bash -c 'pip install safety && safety check'
+        language: system
+        pass_filenames: false
+        files: requirements\.txt$

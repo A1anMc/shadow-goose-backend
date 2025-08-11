@@ -1,0 +1,50 @@
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.cache/
+.coverage*
+htmlcov/
+
+# Backend env & branding secrets
+.env
+.env.*
+
+# ML artifacts
+app/ml_models/*.pkl
+app/ml_models/*.joblib
+
+# Node/Next.js (frontend)
+frontend/node_modules/
+frontend/.next/
+frontend/.turbo/
+frontend/.vercel/
+frontend/out/
+frontend/.eslintcache
+frontend/.env
+frontend/.env.*
+
+# Legacy/archives (optional)
+ARCHIVE/**/node_modules/
+ARCHIVE/**/.next/
+ARCHIVE/**/out/
+
+# Local databases/backups (if any)
+*.db
+*.sqlite
+backups/

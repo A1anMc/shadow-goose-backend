@@ -1,0 +1,17 @@
+name: Deploy (Placeholder)
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'staging or production'
+        required: true
+        default: 'staging'
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Echo next steps
+        run: |
+          echo "This is a placeholder. Use Render Dashboard to deploy services."
+          echo "Ensure env vars are set per WHITE_LABEL_UPDATED/ENV_TEMPLATE.production"

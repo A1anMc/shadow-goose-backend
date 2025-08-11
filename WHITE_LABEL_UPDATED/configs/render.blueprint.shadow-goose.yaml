@@ -1,0 +1,114 @@
+# Render Blueprint for Shadow Goose (staging + production)
+# Notes:
+# - Replace the repo URLs and adjust rootDir if your repos are not monorepos.
+# - EnvVarGroups are created empty; fill secrets in Render after first sync.
+
+version: "1"
+
+envVarGroups:
+  - name: shadow-goose-api-staging
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://shadow-goose-web-staging.onrender.com
+  - name: shadow-goose-web-staging
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://shadow-goose-api-staging.onrender.com
+      - key: NEXT_PUBLIC_CLIENT
+        value: shadow-goose
+      - key: NEXT_PUBLIC_APP_NAME
+        value: Shadow Goose Entertainment (Staging)
+      - key: NEXT_PUBLIC_APP_VERSION
+        value: 1.0.0
+      - key: NEXT_PUBLIC_ENV
+        value: staging
+
+  - name: shadow-goose-api-production
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://shadow-goose-web.onrender.com
+  - name: shadow-goose-web-production
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://shadow-goose-api.onrender.com
+      - key: NEXT_PUBLIC_CLIENT
+        value: shadow-goose
+      - key: NEXT_PUBLIC_APP_NAME
+        value: Shadow Goose Entertainment
+      - key: NEXT_PUBLIC_APP_VERSION
+        value: 1.0.0
+      - key: NEXT_PUBLIC_ENV
+        value: production
+
+services:
+  - type: web
+    name: shadow-goose-api-staging
+    env: python
+    plan: starter
+    repo: https://github.com/ORG/BACKEND_REPO.git  # TODO: set your repo URL
+    branch: main
+    rootDir: .  # adjust if backend lives in a subfolder
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVarGroups:
+      - shadow-goose-api-staging
+    healthCheckPath: /health
+
+  - type: web
+    name: shadow-goose-web-staging
+    env: node
+    plan: starter
+    repo: https://github.com/ORG/FRONTEND_REPO.git  # TODO: set your repo URL
+    branch: main
+    rootDir: .  # set to "frontend" if monorepo
+    buildCommand: npm ci && npm run build
+    startCommand: PORT=$PORT node .next/standalone/server.js
+    envVarGroups:
+      - shadow-goose-web-staging
+    healthCheckPath: /api/health
+
+  - type: web
+    name: shadow-goose-api
+    env: python
+    plan: starter
+    repo: https://github.com/ORG/BACKEND_REPO.git  # TODO: set your repo URL
+    branch: main
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVarGroups:
+      - shadow-goose-api-production
+    healthCheckPath: /health
+
+  - type: web
+    name: shadow-goose-web
+    env: node
+    plan: starter
+    repo: https://github.com/ORG/FRONTEND_REPO.git  # TODO: set your repo URL
+    branch: main
+    rootDir: .  # set to "frontend" if monorepo
+    buildCommand: npm ci && npm run build
+    startCommand: PORT=$PORT node .next/standalone/server.js
+    envVarGroups:
+      - shadow-goose-web-production
+    healthCheckPath: /api/health
