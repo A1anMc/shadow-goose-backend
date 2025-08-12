@@ -1,6 +1,3 @@
-Perfect! Here's the complete `app/grants.py` file ready for copy and paste:
-
-```python
 import uuid
 import logging
 from datetime import datetime, timedelta
