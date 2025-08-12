@@ -1101,6 +1101,35 @@ class RulesEngine:
 
 # Global rules engine instance
 rules_engine = RulesEngine()
+# Add this method to the RulesEngine class:
+
+def get_all_rules(self):
+    """
+    Get all rules from the rules engine.
+    
+    Returns:
+        list: List of all rules, or empty list if no rules exist
+    """
+    try:
+        # Check if rules exist as different attributes
+        if hasattr(self, 'rules'):
+            return self.rules or []
+        elif hasattr(self, '_rules'):
+            return self._rules or []
+        elif hasattr(self, 'rules_list'):
+            return self.rules_list or []
+        elif hasattr(self, 'all_rules'):
+            return self.all_rules or []
+        else:
+            # If no rules storage found, return empty list
+            return []
+    except Exception as e:
+        # Log error and return empty list to prevent crashes
+        if hasattr(self, 'logger'):
+            self.logger.error(f"Error in get_all_rules: {e}")
+        else:
+            print(f"Error in get_all_rules: {e}")
+        return []
 
 # Initialize with default rules
 for rule in rules_engine.get_default_rules():
