@@ -1192,3 +1192,18 @@ async def submit_application(application_id: str):
     """Submit a grant application"""
     try:
         success = grant_service
+        @router.post("/api/grant-applications/{application_id}/submit")
+async def submit_application(application_id: str):
+    """Submit a grant application"""
+    try:
+        success = grant_service.submit_application(application_id)
+        if success:
+            logger.info(f"Successfully submitted application {application_id}")
+            return {"message": "Application submitted successfully", "data_source": "api"}
+        else:
+            raise HTTPException(status_code=404, detail="Application not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in submit_application endpoint: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to submit application: {str(e)}")
