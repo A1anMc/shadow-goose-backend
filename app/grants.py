@@ -986,6 +986,35 @@ async def submit_application(application_id: str):
         )
 
 
+@router.get("/api/grant-applications/{application_id}")
+async def get_application(application_id: str):
+    """Get a specific grant application"""
+    try:
+        application = grant_service.get_application_by_id(application_id)
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found")
+        return application
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get application: {str(e)}")
+
+@router.get("/api/grant-applications/{application_id}/answers")
+async def get_application_answers(application_id: str):
+    """Get answers for a specific application"""
+    try:
+        answers = grant_service.get_application_answers(application_id)
+        return {"answers": answers}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get answers: {str(e)}")
+
+@router.get("/api/grant-applications/{application_id}/comments")
+async def get_application_comments(application_id: str):
+    """Get comments for a specific application"""
+    try:
+        comments = grant_service.get_application_comments(application_id)
+        return {"comments": comments}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get comments: {str(e)}")
+
 @router.get("/api/grant-applications/stats")
 async def get_application_stats(user_id: str):
     """Get application statistics for a user"""
