@@ -965,7 +965,15 @@ async def get_grants():
     """Get all available grants"""
     try:
         grants = grant_service.get_all_grants()
-        return {"grants": grants, "data_source": "api"}
+        
+        # Add data_source to each grant for frontend compatibility
+        grants_with_source = []
+        for grant in grants:
+            grant_dict = grant.dict()
+            grant_dict['data_source'] = 'api'
+            grants_with_source.append(grant_dict)
+        
+        return {"grants": grants_with_source, "data_source": "api"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch grants: {str(e)}")
 
