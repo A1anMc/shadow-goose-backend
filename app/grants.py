@@ -1176,3 +1176,4 @@ async def get_application_stats(user_id: str):
         raise HTTPException(
             status_code=500, detail=f"Failed to get statistics: {str(e)}"
         )
+# Force redeploy - Wed Aug 13 11:08:52 AEST 2025
