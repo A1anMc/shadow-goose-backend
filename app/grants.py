@@ -826,6 +826,7 @@ class GrantService:
 # Initialize the enhanced service
 grant_service = GrantService()
 
+from typing import List, Optional
 
 router = APIRouter()
 

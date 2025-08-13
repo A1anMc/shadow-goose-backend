@@ -14,6 +14,7 @@ from .grants import (
     GrantStatus,
     GrantPriority,
     GrantCategory,
+    router as grants_router,
 )
 import logging
 import time
@@ -24,6 +25,9 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Shadow Goose API", version="4.5.0")
+
+# Include routers
+app.include_router(grants_router, prefix="/api", tags=["grants"])
 
 # Configuration
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
