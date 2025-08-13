@@ -5,6 +5,7 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, validator
 from enum import Enum
 import time
+from fastapi import APIRouter, HTTPException
 
 # Advanced Quality Assurance Constants
 GRANT_AMOUNT_MIN = 1000.00
@@ -151,7 +152,7 @@ class Grant(BaseModel):
 
     # Audit trail method
     def log_audit_event(
-        self, action: str, user_id: str, details: Dict[str, Any] = None
+        self, action: str, user_id: str, details: Optional[Dict[str, Any]] = None
     ):
         """Log audit event for data integrity tracking"""
         if not AUDIT_ENABLED:
@@ -221,7 +222,7 @@ class GrantApplication(BaseModel):
             return f"AUD ${amount}"
 
     def log_audit_event(
-        self, action: str, user_id: str, details: Dict[str, Any] = None
+        self, action: str, user_id: str, details: Optional[Dict[str, Any]] = None
     ):
         """Log audit event for data integrity tracking"""
         if not AUDIT_ENABLED:
@@ -421,7 +422,7 @@ class GrantService:
                 return cached_grants
 
             # Get from database
-            grants = SAMPLE_GRANTS.copy()
+            grants = [Grant(**grant_data) for grant_data in SAMPLE_GRANTS]
 
             # Cache the result
             grant_service._set_cached_data(cache_key, grants)
@@ -626,7 +627,10 @@ class GrantService:
 
     @staticmethod
     def create_application(
-        grant_id: str, title: str, assigned_to: str, collaborators: List[str] = None
+        grant_id: str,
+        title: str,
+        assigned_to: str,
+        collaborators: Optional[List[str]] = None,
     ) -> GrantApplication:
         """Create a new grant application"""
         try:
@@ -821,3 +825,195 @@ class GrantService:
 
 # Initialize the enhanced service
 grant_service = GrantService()
+
+
+router = APIRouter()
+
+
+@router.get("/api/grants")
+async def get_grants():
+    """Get all available grants"""
+    try:
+        grants = grant_service.get_all_grants()
+        return {"grants": grants, "data_source": "api"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch grants: {str(e)}")
+
+
+@router.get("/api/grants/{grant_id}")
+async def get_grant(grant_id: str):
+    """Get a specific grant by ID"""
+    try:
+        grant = grant_service.get_grant_by_id(grant_id)
+        if not grant:
+            raise HTTPException(status_code=404, detail="Grant not found")
+        return {"grant": grant, "data_source": "api"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch grant: {str(e)}")
+
+
+@router.post("/api/grants/search")
+async def search_grants(
+    keywords: Optional[str] = None,
+    category: Optional[GrantCategory] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    deadline_before: Optional[datetime] = None,
+    limit: int = 100,
+):
+    """Search grants with filters"""
+    try:
+        grants = grant_service.search_grants(
+            keywords=keywords,
+            category=category,
+            min_amount=min_amount,
+            max_amount=max_amount,
+            deadline_before=deadline_before,
+            limit=limit,
+        )
+        return {"grants": grants, "data_source": "api"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to search grants: {str(e)}"
+        )
+
+
+@router.post("/api/grants/recommendations")
+async def get_recommendations(user_profile: dict):
+    """Get AI-powered grant recommendations"""
+    try:
+        recommendations = grant_service.get_recommended_grants(user_profile)
+        return {"recommendations": recommendations, "data_source": "api"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get recommendations: {str(e)}"
+        )
+
+
+@router.get("/api/grants/categories")
+async def get_categories():
+    """Get all available grant categories"""
+    try:
+        categories = [category.value for category in GrantCategory]
+        return {"categories": categories}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch categories: {str(e)}"
+        )
+
+
+@router.get("/api/grant-applications")
+async def get_applications(user_id: str):
+    """Get all applications for a user"""
+    try:
+        applications = grant_service.get_applications_by_user(user_id)
+        return {"applications": applications}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch applications: {str(e)}"
+        )
+
+
+@router.post("/api/grant-applications")
+async def create_application(
+    grant_id: str,
+    title: str,
+    assigned_to: str,
+    collaborators: Optional[List[str]] = None,
+):
+    """Create a new grant application"""
+    try:
+        application = grant_service.create_application(
+            grant_id=grant_id,
+            title=title,
+            assigned_to=assigned_to,
+            collaborators=collaborators,
+        )
+        return {"application": application}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create application: {str(e)}"
+        )
+
+
+@router.post("/api/grant-applications/{application_id}/answers")
+async def update_application_answer(
+    application_id: str, question: str, answer: str, author: str
+):
+    """Update or create an answer for a grant application"""
+    try:
+        result = grant_service.update_application_answer(
+            application_id=application_id,
+            question=question,
+            answer=answer,
+            author=author,
+        )
+        return {"answer": result}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update answer: {str(e)}"
+        )
+
+
+@router.post("/api/grant-applications/{application_id}/comments")
+async def add_application_comment(application_id: str, content: str, author: str):
+    """Add a comment to a grant application"""
+    try:
+        comment = grant_service.add_comment(
+            application_id=application_id, content=content, author=author
+        )
+        return {"comment": comment}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to add comment: {str(e)}")
+
+
+@router.post("/api/grant-applications/{application_id}/submit")
+async def submit_application(application_id: str):
+    """Submit a grant application"""
+    try:
+        success = grant_service.submit_application(application_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Application not found")
+        return {"message": "Application submitted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to submit application: {str(e)}"
+        )
+
+
+@router.get("/api/grant-applications/stats")
+async def get_application_stats(user_id: str):
+    """Get application statistics for a user"""
+    try:
+        applications = grant_service.get_applications_by_user(user_id)
+
+        total = len(applications)
+        submitted = len(
+            [app for app in applications if app.status == GrantStatus.SUBMITTED]
+        )
+        approved = len(
+            [app for app in applications if app.status == GrantStatus.APPROVED]
+        )
+        rejected = len(
+            [app for app in applications if app.status == GrantStatus.REJECTED]
+        )
+        draft = len([app for app in applications if app.status == GrantStatus.DRAFT])
+
+        success_rate = (approved / total * 100) if total > 0 else 0
+
+        return {
+            "total_applications": total,
+            "submitted": submitted,
+            "approved": approved,
+            "rejected": rejected,
+            "draft": draft,
+            "success_rate": round(success_rate, 2),
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get statistics: {str(e)}"
+        )
