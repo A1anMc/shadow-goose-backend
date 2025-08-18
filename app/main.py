@@ -14,8 +14,8 @@ from .grants import (
     GrantStatus,
     GrantPriority,
     GrantCategory,
-    router as grants_router,
 )
+from .api_grants_endpoints import router as grants_router
 import logging
 import time
 import psutil
